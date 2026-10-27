@@ -12,12 +12,14 @@ visiting the page would do.
 """
 from __future__ import annotations
 
+import concurrent.futures
 import json
 import logging
 import os
 import queue
 import secrets
 import threading
+import time
 
 from flask import Flask, Response, abort, jsonify, render_template, request
 
@@ -26,28 +28,35 @@ from .engine import PrivacyPostureAssessor
 app = Flask(__name__)
 _log = logging.getLogger("dkcissp.privacy_posture")
 
-_TOKEN_COOKIE = "dkcissp_token"
-
-# Per-process secret, known only to pages this server itself rendered. Every
-# state-changing/scan-triggering request must present it. This is the primary
-# defense against a malicious page in another tab (or a DNS-rebinding attack)
-# using this unauthenticated localhost server as a blind request proxy —
-# without the token, a cross-origin page cannot trigger a scan even though
-# the server listens on 127.0.0.1 with no login.
-#
-# Delivered as an HttpOnly, SameSite=Strict cookie (set when "/" loads)
-# rather than a URL query parameter: a token in a URL ends up in the
-# webserver's own access log — which, run under systemd, is persisted
-# indefinitely in the journal — and in browser history. A cookie is sent
-# automatically by the browser on same-origin requests (including the
-# EventSource call, which cannot set custom headers) without ever appearing
-# in a URL. A request header is still accepted too, for non-browser/API use.
+# Per-process secret, known only to pages this server itself rendered (never
+# a cookie): every scan-triggering request must present it in a header. A
+# cookie would be sent by the browser AMBIENTLY — automatically, on any
+# matching request, without the calling script needing to know its value —
+# which is exactly the property CSRF defenses must avoid relying on alone.
+# A header must be set explicitly by JavaScript that has actually read this
+# value, which a cross-origin page cannot do. It's embedded directly in the
+# rendered page (never a URL) so it never reaches a browser history entry or
+# the webserver's own access log (which, run under systemd, journald
+# persists indefinitely).
 _SESSION_TOKEN = secrets.token_urlsafe(24)
 
 # At most one scan running at a time. This is a single-user local tool with
 # no account system; unbounded concurrent scans (each potentially spawning
 # its own Chromium process) have no natural backpressure otherwise.
 _scan_slot = threading.Semaphore(1)
+
+# Hard ceiling on how long any single assessment is allowed to make a caller
+# wait. Every individual network/CDP call inside the engine already carries
+# its own timeout, but there was no TOP-LEVEL deadline tying them together —
+# a pathological stacking of several near-worst-case waits could still leave
+# a request (and the scan slot above) hanging far longer than any one
+# component's own timeout suggests. Exceeding this deadline gives the caller
+# a definitive answer and frees the scan slot for the next request; it does
+# not forcibly kill the still-running analysis thread, which is expected to
+# finish on its own shortly after via its own nested timeouts.
+_ANALYSIS_DEADLINE_S = 120
+
+_executor = concurrent.futures.ThreadPoolExecutor(max_workers=4, thread_name_prefix="dkcissp-scan")
 
 
 @app.before_request
@@ -63,22 +72,14 @@ def _restrict_to_local_browser():
 
 
 def _check_token():
-    token = (request.headers.get("X-DKCISSP-Token")
-             or request.cookies.get(_TOKEN_COOKIE)
-             or request.args.get("token"))
+    token = request.headers.get("X-DKCISSP-Token")
     if not token or not secrets.compare_digest(token, _SESSION_TOKEN):
         abort(403)
 
 
 @app.route("/")
 def index():
-    resp = Response(render_template("index.html"))
-    # HttpOnly: inaccessible to page JavaScript (nothing needs to read it —
-    # the browser just needs to send it back). SameSite=Strict: never sent
-    # on a cross-site request, a second layer behind the Host-header check
-    # above. Not Secure since this is plain-HTTP loopback-only by design.
-    resp.set_cookie(_TOKEN_COOKIE, _SESSION_TOKEN, httponly=True, samesite="Strict")
-    return resp
+    return render_template("index.html", session_token=_SESSION_TOKEN)
 
 
 def _run_analysis(domain: str, no_headless: bool, on_progress=None) -> dict:
@@ -105,7 +106,12 @@ def api_assess():
     if not _scan_slot.acquire(blocking=False):
         return jsonify({"error": "Another assessment is already running — wait for it to finish."}), 429
     try:
-        result = _run_analysis(domain, no_headless)
+        future = _executor.submit(_run_analysis, domain, no_headless)
+        try:
+            result = future.result(timeout=_ANALYSIS_DEADLINE_S)
+        except concurrent.futures.TimeoutError:
+            _log.error("Assessment of %r exceeded the %ss deadline", domain, _ANALYSIS_DEADLINE_S)
+            result = {"error": f"Assessment timed out after {_ANALYSIS_DEADLINE_S}s."}
     finally:
         _scan_slot.release()
     if result.get("error"):
@@ -113,13 +119,17 @@ def api_assess():
     return jsonify(result)
 
 
-@app.route("/api/assess-stream")
+@app.route("/api/assess-stream", methods=["POST"])
 def api_assess_stream():
-    """Server-Sent Events: live progress lines while the scan runs, ending
-    with one 'result' event carrying the full JSON result."""
+    """Server-Sent-Events-style stream (read with fetch(), not EventSource —
+    EventSource can only ever issue GET with no custom headers, which would
+    force the auth token back into the URL/query string). Live progress
+    lines while the scan runs, ending with one 'result' event carrying the
+    full JSON result."""
     _check_token()
-    domain = (request.args.get("domain") or "").strip()
-    no_headless = request.args.get("no_headless") == "1"
+    data = request.get_json(silent=True) or {}
+    domain = (data.get("domain") or "").strip()
+    no_headless = bool(data.get("no_headless"))
     if not domain:
         return jsonify({"error": "Enter a domain or URL to assess."}), 400
 
@@ -138,13 +148,23 @@ def api_assess_stream():
     threading.Thread(target=worker, daemon=True).start()
 
     def stream():
+        deadline = time.monotonic() + _ANALYSIS_DEADLINE_S
         while True:
-            kind, payload = q.get()
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                _log.error("Assessment of %r exceeded the %ss deadline", domain, _ANALYSIS_DEADLINE_S)
+                payload = {"error": f"Assessment timed out after {_ANALYSIS_DEADLINE_S}s."}
+                yield f"event: result\ndata: {json.dumps(payload)}\n\n"
+                return
+            try:
+                kind, payload = q.get(timeout=remaining)
+            except queue.Empty:
+                continue
             if kind == "progress":
                 yield f"event: progress\ndata: {json.dumps(payload)}\n\n"
             else:
                 yield f"event: result\ndata: {json.dumps(payload, default=str)}\n\n"
-                break
+                return
 
     return Response(stream(), mimetype="text/event-stream",
                     headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
