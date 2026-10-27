@@ -216,19 +216,35 @@ _MAX_BODY_BYTES = 10 * 1024 * 1024  # 10 MB — generous for any real page
 
 def _capped_get(url: str, **kwargs):
     """requests.get() with a hard cap on how much response body is ever held
-    in memory (CWE-400). Also refuses compressed transfer encodings: without
-    that, a response of only a few KB on the wire could decompress to
-    gigabytes before our byte cap below ever sees it (CWE-409, a
-    "decompression bomb") — safer to just not negotiate compression for a
-    one-shot page fetch than to try to cap post-decompression size."""
+    in memory (CWE-400), and an outright refusal of compressed responses
+    (CWE-409, "decompression bomb") rather than trying to cap them after the
+    fact.
+
+    Asking for Accept-Encoding: identity is only a polite REQUEST — a
+    malicious server is free to ignore it and send a compressed body anyway.
+    If it does, urllib3's streaming reader decompresses internally as it
+    reads, and a single small compressed chunk can expand to an enormous
+    decompressed one in that one step — i.e. a byte-counter checked only
+    BETWEEN chunks (the previous version of this function) can be blown
+    through within a single chunk, since chunk_size bounds the COMPRESSED
+    bytes requested per read, not the decompressed bytes it can yield. The
+    only reliable fix is to never attempt to read/decompress such a body at
+    all: check the response's actual Content-Encoding header and abort
+    immediately if the server sent one despite our request not to."""
     headers = dict(kwargs.pop("headers", None) or {})
     headers.setdefault("Accept-Encoding", "identity")
     kwargs["headers"] = headers
     kwargs["stream"] = True
     resp = requests.get(url, **kwargs)
+    encoding = (resp.headers.get("Content-Encoding") or "").strip().lower()
+    if encoding not in ("", "identity"):
+        resp.close()
+        resp._content = b""
+        resp._content_consumed = True
+        return resp
     try:
         chunks, total = [], 0
-        for chunk in resp.iter_content(chunk_size=65536):
+        for chunk in resp.iter_content(chunk_size=65536, decode_unicode=False):
             if not chunk:
                 continue
             chunks.append(chunk)

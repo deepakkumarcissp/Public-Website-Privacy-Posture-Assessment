@@ -164,10 +164,11 @@
   </div>
 </footer>
 <script>
-// No token is embedded here — it's delivered as an HttpOnly cookie the
-// browser attaches automatically to same-origin requests (including the
-// EventSource call below), so it never appears in a URL, browser history,
-// or the server's own access log.
+// Sent as an explicit header on every API call (never a URL/cookie) — a
+// cross-origin page cannot read this value, so it can't forge a request
+// carrying it, and it never ends up in browser history or the server's own
+// access log the way a URL-embedded token would.
+const SESSION_TOKEN = {{ session_token | tojson }};
 const btn = document.getElementById('assess-btn');
 const resultEl = document.getElementById('result');
 const placeholderEl = document.getElementById('result-placeholder');
@@ -286,7 +287,52 @@ function render(result) {
   placeholderEl.style.display = 'none';
 }
 
-btn.addEventListener('click', () => {
+// Minimal hand-rolled parser for the server's "event: X\ndata: Y\n\n" stream,
+// read via fetch() instead of EventSource. EventSource can only issue GET
+// with no custom headers, which would force the auth token into the URL —
+// fetch() lets us send it as a header instead, so it never appears in a URL,
+// browser history, or the server's own access log.
+async function streamAssessment(domain, noHeadless, { onProgress, onResult, onError }) {
+  let resp;
+  try {
+    resp = await fetch('/api/assess-stream', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-DKCISSP-Token': SESSION_TOKEN },
+      body: JSON.stringify({ domain, no_headless: noHeadless }),
+    });
+  } catch (e) {
+    onError('Could not reach the local server: ' + e.message);
+    return;
+  }
+  if (!resp.ok || !resp.body) {
+    let msg = `Request failed (HTTP ${resp.status}).`;
+    try { const j = await resp.json(); if (j.error) msg = j.error; } catch (e) {}
+    onError(msg);
+    return;
+  }
+  const reader = resp.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = '';
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    let idx;
+    while ((idx = buf.indexOf('\n\n')) !== -1) {
+      const block = buf.slice(0, idx);
+      buf = buf.slice(idx + 2);
+      const eventLine = block.split('\n').find(l => l.startsWith('event: '));
+      const dataLine = block.split('\n').find(l => l.startsWith('data: '));
+      if (!eventLine || !dataLine) continue;
+      const kind = eventLine.slice('event: '.length);
+      const data = JSON.parse(dataLine.slice('data: '.length));
+      if (kind === 'progress') onProgress(data);
+      else if (kind === 'result') { onResult(data); return; }
+    }
+  }
+}
+
+btn.addEventListener('click', async () => {
   const domain = document.getElementById('domain').value.trim();
   const noHeadless = document.getElementById('no-headless').checked;
   if (!domain) {
@@ -300,28 +346,20 @@ btn.addEventListener('click', () => {
   resultEl.style.display = 'none';
   placeholderEl.style.display = 'none';
 
-  const qs = new URLSearchParams({ domain, no_headless: noHeadless ? '1' : '0' });
-  const es = new EventSource('/api/assess-stream?' + qs.toString());
-
-  es.addEventListener('progress', (ev) => {
-    logLine(JSON.parse(ev.data));
+  await streamAssessment(domain, noHeadless, {
+    onProgress: (msg) => logLine(msg),
+    onResult: (data) => {
+      logLine('Assessment complete.', true);
+      render(data);
+      btn.disabled = false;
+      btn.textContent = 'Run Assessment';
+    },
+    onError: (msg) => {
+      logLine(msg, false);
+      btn.disabled = false;
+      btn.textContent = 'Run Assessment';
+    },
   });
-
-  es.addEventListener('result', (ev) => {
-    logLine('Assessment complete.', true);
-    const data = JSON.parse(ev.data);
-    render(data);
-    es.close();
-    btn.disabled = false;
-    btn.textContent = 'Run Assessment';
-  });
-
-  es.onerror = () => {
-    logLine('Connection to the local server was lost.', false);
-    es.close();
-    btn.disabled = false;
-    btn.textContent = 'Run Assessment';
-  };
 });
 </script>
 </body>
