@@ -19,6 +19,27 @@ PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=read-only
 ReadWritePaths=__INSTALL_DIR__
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+LockPersonality=true
+RestrictRealtime=true
+# RestrictNamespaces and a seccomp SystemCallFilter are deliberately NOT set
+# here: Chromium's OWN internal process sandbox (which this app relies on —
+# see headless.py, which never passes --no-sandbox outside of root/container
+# use) itself depends on creating Linux namespaces and a broad syscall set
+# for its sandboxed renderer processes. Restricting either at the systemd
+# level risks silently breaking or degrading Chromium's sandbox rather than
+# adding a second layer on top of it.
+
+# Resource ceiling: this is a single-user local tool with no account system,
+# so an uncapped process is the only backstop against a scan (or a Chromium
+# process it spawns) running away with memory/CPU/process count — whether
+# from a bug here or a maliciously-crafted page being assessed.
+MemoryMax=1536M
+TasksMax=256
+CPUQuota=200%
 
 [Install]
 WantedBy=default.target

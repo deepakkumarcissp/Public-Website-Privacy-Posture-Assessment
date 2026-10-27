@@ -13,6 +13,7 @@ visiting the page would do.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import queue
 import secrets
@@ -23,6 +24,9 @@ from flask import Flask, Response, abort, jsonify, render_template, request
 from .engine import PrivacyPostureAssessor
 
 app = Flask(__name__)
+_log = logging.getLogger("dkcissp.privacy_posture")
+
+_TOKEN_COOKIE = "dkcissp_token"
 
 # Per-process secret, known only to pages this server itself rendered. Every
 # state-changing/scan-triggering request must present it. This is the primary
@@ -30,7 +34,20 @@ app = Flask(__name__)
 # using this unauthenticated localhost server as a blind request proxy —
 # without the token, a cross-origin page cannot trigger a scan even though
 # the server listens on 127.0.0.1 with no login.
+#
+# Delivered as an HttpOnly, SameSite=Strict cookie (set when "/" loads)
+# rather than a URL query parameter: a token in a URL ends up in the
+# webserver's own access log — which, run under systemd, is persisted
+# indefinitely in the journal — and in browser history. A cookie is sent
+# automatically by the browser on same-origin requests (including the
+# EventSource call, which cannot set custom headers) without ever appearing
+# in a URL. A request header is still accepted too, for non-browser/API use.
 _SESSION_TOKEN = secrets.token_urlsafe(24)
+
+# At most one scan running at a time. This is a single-user local tool with
+# no account system; unbounded concurrent scans (each potentially spawning
+# its own Chromium process) have no natural backpressure otherwise.
+_scan_slot = threading.Semaphore(1)
 
 
 @app.before_request
@@ -46,14 +63,34 @@ def _restrict_to_local_browser():
 
 
 def _check_token():
-    token = request.headers.get("X-DKCISSP-Token") or request.args.get("token")
+    token = (request.headers.get("X-DKCISSP-Token")
+             or request.cookies.get(_TOKEN_COOKIE)
+             or request.args.get("token"))
     if not token or not secrets.compare_digest(token, _SESSION_TOKEN):
         abort(403)
 
 
 @app.route("/")
 def index():
-    return render_template("index.html", session_token=_SESSION_TOKEN)
+    resp = Response(render_template("index.html"))
+    # HttpOnly: inaccessible to page JavaScript (nothing needs to read it —
+    # the browser just needs to send it back). SameSite=Strict: never sent
+    # on a cross-site request, a second layer behind the Host-header check
+    # above. Not Secure since this is plain-HTTP loopback-only by design.
+    resp.set_cookie(_TOKEN_COOKIE, _SESSION_TOKEN, httponly=True, samesite="Strict")
+    return resp
+
+
+def _run_analysis(domain: str, no_headless: bool, on_progress=None) -> dict:
+    """Shared analysis runner with a generic error message for the caller —
+    the real exception is logged server-side only, never echoed back, so an
+    unexpected internal failure can't leak file paths or internal state."""
+    analyzer = PrivacyPostureAssessor(cfg={"headless": not no_headless}, on_progress=on_progress)
+    try:
+        return analyzer.analyze(domain)
+    except Exception:
+        _log.exception("Assessment of %r failed", domain)
+        return {"error": "Assessment failed due to an internal error. See the server log for details."}
 
 
 @app.route("/api/assess", methods=["POST"])
@@ -65,11 +102,12 @@ def api_assess():
         return jsonify({"error": "Enter a domain or URL to assess."}), 400
 
     no_headless = bool(data.get("no_headless"))
-    analyzer = PrivacyPostureAssessor(cfg={"headless": not no_headless})
+    if not _scan_slot.acquire(blocking=False):
+        return jsonify({"error": "Another assessment is already running — wait for it to finish."}), 429
     try:
-        result = analyzer.analyze(domain)
-    except Exception as e:
-        return jsonify({"error": f"Assessment failed: {e}"}), 500
+        result = _run_analysis(domain, no_headless)
+    finally:
+        _scan_slot.release()
     if result.get("error"):
         return jsonify(result), 422
     return jsonify(result)
@@ -85,15 +123,16 @@ def api_assess_stream():
     if not domain:
         return jsonify({"error": "Enter a domain or URL to assess."}), 400
 
+    if not _scan_slot.acquire(blocking=False):
+        return jsonify({"error": "Another assessment is already running — wait for it to finish."}), 429
+
     q: "queue.Queue" = queue.Queue()
 
     def worker():
-        analyzer = PrivacyPostureAssessor(cfg={"headless": not no_headless},
-                                          on_progress=lambda msg: q.put(("progress", msg)))
         try:
-            result = analyzer.analyze(domain)
-        except Exception as e:
-            result = {"error": f"Assessment failed: {e}"}
+            result = _run_analysis(domain, no_headless, on_progress=lambda msg: q.put(("progress", msg)))
+        finally:
+            _scan_slot.release()
         q.put(("result", result))
 
     threading.Thread(target=worker, daemon=True).start()
