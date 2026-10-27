@@ -102,45 +102,97 @@ _NAT64_PREFIX = ipaddress.ip_network("64:ff9b::/96")
 _VALID_HOSTNAME = re.compile(r"^[A-Za-z0-9]([A-Za-z0-9-]{0,62}\.)*[A-Za-z0-9]([A-Za-z0-9-]{0,62})?$")
 
 
-def _embedded_ipv4(ip):
-    """Return the IPv4 address embedded in `ip`, if any (IPv4-mapped, NAT64,
-    6to4, or Teredo), else None. There are several distinct IPv6 encodings of
-    an IPv4 address, each of which must be unwrapped and re-checked — an
-    address can otherwise disguise a blocked IPv4 target under a form that
-    doesn't match a plain IPv4 blocklist/network check."""
+_IPV4_COMPATIBLE_PREFIX = ipaddress.ip_network("::/96")
+
+
+def _embedded_ipv4s(ip):
+    """Return every IPv4 address embedded in `ip` under any of the distinct
+    IPv6 encodings of one (IPv4-mapped, deprecated IPv4-compatible, NAT64,
+    6to4, Teredo's server AND client address). There are several such
+    encodings, each of which must be unwrapped and re-checked — an address
+    can otherwise disguise a blocked IPv4 target under a form that doesn't
+    match a plain IPv4 blocklist/network check."""
+    out = []
     mapped = getattr(ip, "ipv4_mapped", None)
     if mapped:
-        return mapped
+        out.append(mapped)
     if ip in _NAT64_PREFIX:
-        return ipaddress.IPv4Address(int(ip) & 0xFFFFFFFF)
+        out.append(ipaddress.IPv4Address(int(ip) & 0xFFFFFFFF))
+    if ip in _IPV4_COMPATIBLE_PREFIX and int(ip) not in (0, 1):
+        out.append(ipaddress.IPv4Address(int(ip) & 0xFFFFFFFF))
     sixtofour = getattr(ip, "sixtofour", None)
     if sixtofour:
-        return sixtofour
+        out.append(sixtofour)
     teredo = getattr(ip, "teredo", None)  # (server_ip, client_ip) or None
     if teredo:
-        return teredo[0]
-    return None
+        out.extend(teredo)
+    return out
 
 
 def _is_blocked_ip(ip) -> bool:
     """True if `ip` (or an IPv4 address it embeds, under any of the several
     IPv6 encodings of one) is a cloud-metadata address, or isn't a globally-
-    routable address at all. Using `is_global` as the primary gate — rather
-    than enumerating every private/link-local/reserved/multicast range by
-    hand — means a new or obscure non-global range doesn't silently slip
-    through; only addresses affirmatively known to be internet-routable are
-    allowed."""
+    routable address at all.
+
+    Belt-and-suspenders: gates primarily on `is_global` (an allowlist of
+    internet-routable addresses, so an obscure or new non-global range
+    doesn't silently slip through) but ALSO explicitly checks
+    reserved/link-local/multicast/unspecified in case a given Python version's
+    `is_global` ever has a gap for one of those categories."""
     if str(ip) in _BLOCKED_SSRF_IPS:
         return True
     if any(ip in net for net in _BLOCKED_SSRF_NETS if net.version == ip.version):
         return True
-    if not ip.is_global:
+    if (not ip.is_global) or ip.is_reserved or ip.is_link_local \
+            or ip.is_multicast or ip.is_unspecified:
         return True
     if ip.version == 6:
-        embedded = _embedded_ipv4(ip)
-        if embedded is not None and _is_blocked_ip(embedded):
-            return True
+        for embedded in _embedded_ipv4s(ip):
+            if _is_blocked_ip(embedded):
+                return True
     return False
+
+
+def _resolve_pinned_ip(host: str):
+    """Resolve `host` ONCE, validate every returned address, and return a
+    single validated address literal suitable for DNS pinning (a plain IPv4
+    string, or a bracketed IPv6 literal for --host-resolver-rules) — or None
+    if the host is syntactically invalid, fails to resolve, or ANY resolved
+    address is blocked.
+
+    This is the single source of truth for "is this host safe to connect
+    to" — callers (the initial per-site gate, and the headless scanner's DNS
+    pinning) share the SAME resolution result rather than each doing their
+    own separate lookup, which would leave a window for a hostname under
+    attacker DNS control to answer differently between the two lookups.
+
+    Fails CLOSED in every case: callers MUST treat None as "refuse to
+    proceed", never as "skip this protection and continue anyway" — doing
+    the latter for the dynamic scan would silently reopen the exact DNS-
+    rebinding window this pinning exists to close."""
+    if not host or not _VALID_HOSTNAME.match(host):
+        return None
+    try:
+        infos = socket.getaddrinfo(host, None)
+    except Exception:
+        return None
+    if not infos:
+        return None
+    ipv4_literal = None
+    ipv6_literal = None
+    for info in infos:
+        raw_ip = info[4][0].split("%")[0]
+        try:
+            ip = ipaddress.ip_address(raw_ip)
+        except ValueError:
+            return None
+        if _is_blocked_ip(ip):
+            return None
+        if ip.version == 4 and ipv4_literal is None:
+            ipv4_literal = str(ip)
+        elif ip.version == 6 and ipv6_literal is None:
+            ipv6_literal = f"[{ip}]"
+    return ipv4_literal or ipv6_literal
 
 
 def _is_safe_target(host: str) -> bool:
@@ -149,50 +201,13 @@ def _is_safe_target(host: str) -> bool:
     this check does — e.g. 'evil.com@169.254.169.254', which requests/urllib3
     would treat as a request to 169.254.169.254 with 'evil.com@' as userinfo)
     AND it resolves to an address that is not cloud-metadata/link-local
-    (including via an IPv4-mapped or NAT64 IPv6 disguise).
+    (including via any disguised IPv6 encoding of one).
 
     Fails CLOSED: a hostname that doesn't match the allowed character set, or
     that fails to resolve at all, is treated as unsafe rather than allowed
     through. (A genuinely-unreachable domain still gets a clear "could not
     reach" error later — it just never reaches the network layer first.)"""
-    if not host or not _VALID_HOSTNAME.match(host):
-        return False
-    try:
-        infos = socket.getaddrinfo(host, None)
-    except Exception:
-        return False
-    if not infos:
-        return False
-    for info in infos:
-        raw_ip = info[4][0].split("%")[0]
-        try:
-            ip = ipaddress.ip_address(raw_ip)
-        except ValueError:
-            return False
-        if _is_blocked_ip(ip):
-            return False
-    return True
-
-
-def _resolve_pinned_ip(host: str) -> str:
-    """Return the first safe IP `host` resolves to (for pinning Chromium's
-    own DNS resolution to it — see headless.scan's pinned_host/pinned_ip),
-    or '' if none. Caller must already have confirmed `_is_safe_target(host)`
-    so this never returns a blocked address; it exists to find a SPECIFIC
-    validated address to pin to, not to re-validate."""
-    try:
-        infos = socket.getaddrinfo(host, None)
-    except Exception:
-        return ""
-    for info in infos:
-        raw_ip = info[4][0].split("%")[0]
-        try:
-            ip = ipaddress.ip_address(raw_ip)
-        except ValueError:
-            continue
-        if ip.version == 4 and not _is_blocked_ip(ip):
-            return str(ip)
-    return ""
+    return _resolve_pinned_ip(host) is not None
 
 
 _MAX_REDIRECTS = 5
@@ -386,7 +401,13 @@ class PrivacyPostureAssessor:
                 "https": False, "hsts": False, "findings": [], "score": 0,
                 "risk": "Unknown", "scan_mode": "static", "consent_dyn": None,
                 "net_requests": []}
-        if not _is_safe_target(host):
+        # Single resolution, shared by the safety gate below AND the
+        # headless scanner's DNS pinning — reusing one lookup result instead
+        # of each resolving `host` independently closes the window where a
+        # hostname under attacker DNS control could answer safely for one
+        # lookup and differently for the other.
+        pinned_ip = _resolve_pinned_ip(host)
+        if not pinned_ip:
             site["blocked"] = True
             self._progress(f"Could not safely validate {host} (it did not resolve, or resolves to "
                            "a disallowed cloud-metadata/link-local address) — refusing to assess it.")
@@ -399,7 +420,6 @@ class PrivacyPostureAssessor:
             self._progress(f"Launching local headless Chromium and loading {host}…")
             try:
                 from . import headless as H
-                pinned_ip = _resolve_pinned_ip(host)
                 hs = H.scan("https://" + host, settle=float(self.cfg.get("settle", 4.0)), consent=True,
                            pinned_host=host, pinned_ip=pinned_ip)
                 final_host = urlparse(hs.get("final_url") or "").hostname or ""
