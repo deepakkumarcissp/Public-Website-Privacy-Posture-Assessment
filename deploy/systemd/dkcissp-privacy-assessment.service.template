@@ -1,0 +1,24 @@
+[Unit]
+Description=DKCISSP Privacy Posture Assessment (local web UI)
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=__INSTALL_DIR__
+ExecStart=__INSTALL_DIR__/.venv/bin/dkcissp-privacy-assessment-web
+Environment=HOST=127.0.0.1
+Environment=PORT=1009
+Restart=on-failure
+RestartSec=3
+
+# Hardening: this process only needs to read its own install directory and
+# talk out over the network (to assess whatever site you enter) — it has no
+# business touching the rest of the filesystem or escalating privileges.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=__INSTALL_DIR__
+
+[Install]
+WantedBy=default.target
