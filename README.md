@@ -89,6 +89,27 @@ Open **http://127.0.0.1:1009**, enter a domain, and click **Run Assessment**. A 
 streams while the scan runs (page load, tracker detection, consent-flow test, clause mapping), then
 the full result renders below it.
 
+### Run it as an always-on background service (Linux, systemd)
+
+If you'd rather it just always be running at `http://127.0.0.1:1009` — surviving logout and reboots,
+restarting itself if it crashes — install it as a `systemd --user` service:
+
+```bash
+./deploy/systemd/install-service.sh
+```
+
+This only touches your own user systemd config (no root needed for the service itself; it may ask
+for `sudo` once, to enable "lingering" so the service also starts before you log in, not just after).
+It binds to `127.0.0.1` only, exactly like running it by hand.
+
+Manage it with the usual systemd commands:
+
+```bash
+systemctl --user status dkcissp-privacy-assessment.service
+journalctl --user -u dkcissp-privacy-assessment.service -f   # follow logs
+./deploy/systemd/uninstall-service.sh                          # remove it
+```
+
 ## Use it — as a library
 
 ```python
