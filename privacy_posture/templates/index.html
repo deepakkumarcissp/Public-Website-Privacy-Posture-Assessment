@@ -4,91 +4,121 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>DKCISSP Privacy Posture Assessment</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap">
 <style>
   :root {
-    --bg: #f3f5f8; --panel: #ffffff; --border: #e3e7ed; --border-soft: #edf0f4;
+    --bg: #f2f4f8; --panel: #ffffff; --border: #e3e7ed; --border-soft: #edf0f4;
     --text: #15202e; --muted: #6b7686; --muted-soft: #9aa3b0;
     --accent: #2554e8; --accent-dark: #1a3fb5; --accent-soft: #eaf0ff;
     --critical: #d1302f; --high: #e8650f; --medium: #c99a12; --low: #2a6fd6;
     --ok: #1f9d55; --gap: #d1302f; --part: #d19a12; --att: #6b7bd1;
-    --navy: #142238; --red: #c62834;
+    --navy: #142238; --navy-2: #1b2d4a; --red: #c62834;
     --shadow: 0 1px 2px rgba(20,34,56,.04), 0 8px 24px -16px rgba(20,34,56,.12);
+    --font-head: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --font-body: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --font-mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
   }
   * { box-sizing: border-box; }
+  html, body { height: 100%; }
   body {
-    margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    background: var(--bg); color: var(--text); -webkit-font-smoothing: antialiased;
+    margin: 0; font-family: var(--font-body); background: var(--bg); color: var(--text);
+    -webkit-font-smoothing: antialiased;
   }
-  header {
-    background: var(--panel); border-bottom: 1px solid var(--border);
-    padding: 14px 24px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
-    position: sticky; top: 0; z-index: 10;
-  }
-  .brand { display: flex; align-items: center; gap: 8px; text-decoration: none; }
-  .brand-mark {
-    width: 30px; height: 30px; border-radius: 7px; background: var(--navy); color: #fff;
-    display: grid; place-items: center; font-family: Arial, sans-serif; font-weight: 900;
-    font-size: 12px; letter-spacing: 0.24px; flex: none;
-  }
-  .brand-words { font-family: Arial, sans-serif; font-weight: 900; font-size: 16px; letter-spacing: 0.16px; }
-  .brand-words .dk { color: var(--navy); }
-  .brand-words .cissp { color: var(--red); }
-  header h1 { font-size: 15px; margin: 0; font-weight: 600; }
-  header .tagline { color: var(--muted); font-size: 13px; }
-  header .divider { color: var(--border); }
-  main { max-width: 1320px; margin: 0 auto; padding: 24px 24px 60px; }
-  .panel {
-    background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 20px;
-    margin-bottom: 20px; box-shadow: var(--shadow);
-  }
-  .panel h2 { font-size: 14.5px; margin: 0 0 14px; font-weight: 700; letter-spacing: -.01em; }
-  .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
-  .panel-head h2 { margin: 0; }
+  a { color: var(--accent); }
 
-  /* ── scan form ─────────────────────────────────────────────────────── */
-  .scan-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
-  .scan-row .field { flex: 1; min-width: 220px; }
-  label { font-size: 12.5px; color: var(--muted); display: block; margin-bottom: 4px; font-weight: 600; }
-  input[type=text] {
-    width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 9px; font-size: 14px;
-    background: #fbfcfe; transition: border-color .15s, box-shadow .15s;
+  .app { display: flex; align-items: flex-start; min-height: 100vh; }
+  @media (max-width: 860px) { .app { flex-direction: column; } }
+
+  /* ── left sidebar ───────────────────────────────────────────────────── */
+  .sidebar {
+    width: 272px; flex: none; background: var(--navy); color: #c9d2e3;
+    display: flex; flex-direction: column; min-height: 100vh;
+    position: sticky; top: 0; align-self: flex-start;
   }
-  input[type=text]:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); background: #fff; }
-  .checkbox-row { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--muted); margin-top: 10px; }
-  button {
-    background: var(--accent); color: #fff; border: none; border-radius: 9px;
-    padding: 11px 22px; font-size: 14px; cursor: pointer; font-weight: 700; white-space: nowrap;
+  @media (max-width: 860px) { .sidebar { width: 100%; position: static; min-height: auto; } }
+
+  .sidebar-brand { display: flex; align-items: center; gap: 10px; padding: 20px 20px 16px; }
+  .brand-mark {
+    width: 32px; height: 32px; border-radius: 8px; background: #fff; color: var(--navy);
+    display: grid; place-items: center; font-family: var(--font-mono); font-weight: 700;
+    font-size: 12px; letter-spacing: .02em; flex: none;
+  }
+  .brand-words { font-family: var(--font-head); font-weight: 800; font-size: 16.5px; letter-spacing: .01em; color: #fff; }
+  .brand-words .cissp { color: #ff6b76; }
+  .sidebar-sub { padding: 0 20px 18px; font-size: 11.5px; color: #8d9ab4; line-height: 1.5;
+                 border-bottom: 1px solid rgba(255,255,255,.08); }
+
+  .scan-card { margin: 18px 16px 10px; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.1);
+               border-radius: 12px; padding: 14px; }
+  .scan-card .label { font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; color: #8d9ab4;
+                       font-weight: 700; margin-bottom: 8px; }
+  .scan-card input[type=text] {
+    width: 100%; padding: 9px 11px; border-radius: 8px; border: 1px solid rgba(255,255,255,.14);
+    background: rgba(0,0,0,.2); color: #fff; font-size: 13px; font-family: var(--font-mono);
+    transition: border-color .15s;
+  }
+  .scan-card input[type=text]::placeholder { color: #5d6c8a; }
+  .scan-card input[type=text]:focus { outline: none; border-color: var(--accent); }
+  .scan-opt { display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: #9aa7c0; margin: 9px 0 11px; }
+  .scan-run {
+    width: 100%; background: var(--accent); color: #fff; border: none; border-radius: 8px;
+    padding: 10px; font-size: 13px; font-weight: 700; cursor: pointer; font-family: var(--font-head);
     transition: background .15s, transform .1s;
   }
-  button:hover { background: var(--accent-dark); }
-  button:active { transform: translateY(1px); }
-  button:disabled { opacity: .6; cursor: default; }
-  .btn-ghost {
-    background: #fff; color: var(--accent); border: 1px solid var(--accent);
-    padding: 7px 16px; font-size: 12.5px; font-weight: 700;
-  }
-  .btn-ghost:hover { background: var(--accent-soft); }
-  .hint { font-size: 12px; color: var(--muted); margin-top: 10px; line-height: 1.6; }
-  .scope-notice {
-    font-size: 12.5px; background: #fff7e6; border: 1px solid #f2d394; color: #7a5300;
-    padding: 10px 12px; border-radius: 10px; margin-top: 12px; line-height: 1.55;
-  }
-
-  /* ── activity log ──────────────────────────────────────────────────── */
-  #activity-log {
-    font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; background: #0b1220;
-    color: #c7d2e8; border-radius: 10px; padding: 12px 14px; max-height: 220px; overflow-y: auto;
-    display: none; margin-bottom: 18px;
-  }
-  #activity-log .line { padding: 2px 0; }
-  #activity-log .line::before { content: "› "; color: #5b7fd6; }
-  #activity-log .line.done { color: #6ee7a0; }
-  #activity-log .line.done::before { content: "✓ "; color: #6ee7a0; }
+  .scan-run:hover { background: var(--accent-dark); }
+  .scan-run:active { transform: translateY(1px); }
+  .scan-run:disabled { opacity: .6; cursor: default; }
   .spinner {
     display: inline-block; width: 12px; height: 12px; border: 2px solid rgba(255,255,255,.4);
     border-top-color: #fff; border-radius: 50%; animation: spin .7s linear infinite; margin-right: 6px;
   }
   @keyframes spin { to { transform: rotate(360deg); } }
+
+  #activity-log {
+    font-family: var(--font-mono); font-size: 11.5px; background: rgba(0,0,0,.25);
+    color: #c7d2e8; border-radius: 8px; padding: 10px 11px; max-height: 200px; overflow-y: auto;
+    display: none; margin-top: 11px;
+  }
+  #activity-log .line { padding: 2px 0; }
+  #activity-log .line::before { content: "› "; color: #7e9bf5; }
+  #activity-log .line.done { color: #6ee7a0; }
+  #activity-log .line.done::before { content: "✓ "; color: #6ee7a0; }
+
+  .sidebar-hint { font-size: 11px; color: #8691a8; margin-top: 11px; line-height: 1.6; }
+  .sidebar-scope {
+    font-size: 11px; background: rgba(255,183,0,.1); border: 1px solid rgba(255,183,0,.25); color: #ffcf6b;
+    padding: 9px 10px; border-radius: 8px; margin-top: 11px; line-height: 1.55;
+  }
+  .sidebar-scope strong { color: #ffe3a3; }
+
+  nav.sidebar-nav { padding: 14px 10px; display: flex; flex-direction: column; gap: 2px; }
+  .nav-label { font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; color: #70809f;
+               font-weight: 700; padding: 10px 10px 6px; }
+  .nav-item {
+    display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 8px;
+    font-size: 13.5px; font-weight: 600; color: #b9c3d9; cursor: pointer; text-decoration: none;
+    border: none; background: none; width: 100%; text-align: left; font-family: var(--font-body);
+  }
+  .nav-item .ic { width: 16px; height: 16px; flex: none; opacity: .85; }
+  .nav-item:hover { background: rgba(255,255,255,.06); color: #fff; }
+  .nav-item.active { background: var(--accent); color: #fff; }
+
+  .sidebar-footer { margin-top: auto; padding: 16px 20px 20px; border-top: 1px solid rgba(255,255,255,.08); }
+  .sidebar-footer a { color: #8d9ab4; font-size: 11.5px; text-decoration: none; display: block; margin-bottom: 5px; }
+  .sidebar-footer a:hover { color: #fff; }
+  .sidebar-footer .tag { font-size: 10.5px; color: #5d6c8a; margin-top: 8px; line-height: 1.5; }
+
+  /* ── main content ──────────────────────────────────────────────────── */
+  main { flex: 1; min-width: 0; padding: 28px clamp(16px, 2.5vw, 40px) 60px; max-width: 1680px; margin: 0 auto; }
+  .topbar { margin-bottom: 20px; }
+  .topbar-title { font-family: var(--font-head); font-size: 20px; font-weight: 800; letter-spacing: -.01em; }
+  .topbar-sub { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+
+  .panel {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 20px;
+    margin-bottom: 20px; box-shadow: var(--shadow);
+  }
+  .panel h2 { font-family: var(--font-head); font-size: 14.5px; margin: 0 0 14px; font-weight: 700; letter-spacing: -.01em; }
   #result-placeholder { color: var(--muted); font-size: 13px; }
 
   /* ── hero summary ──────────────────────────────────────────────────── */
@@ -96,11 +126,11 @@
   .gauge-wrap { position: relative; width: 112px; height: 112px; flex: none; }
   .gauge-wrap svg { transform: rotate(-90deg); }
   .gauge-label { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-  .gauge-label .score { font-size: 26px; font-weight: 800; line-height: 1; }
+  .gauge-label .score { font-family: var(--font-mono); font-size: 26px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
   .gauge-label .of100 { font-size: 10.5px; color: var(--muted); margin-top: 2px; }
   .hero-main { flex: 1; min-width: 260px; }
   .hero-title { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
-  .hero-domain { font-size: 18px; font-weight: 800; letter-spacing: -.01em; }
+  .hero-domain { font-family: var(--font-head); font-size: 18px; font-weight: 800; letter-spacing: -.01em; }
   .risk-badge {
     display: inline-block; padding: 4px 12px; border-radius: 999px; color: #fff; font-weight: 700;
     font-size: 12px; text-transform: uppercase; letter-spacing: .03em;
@@ -121,13 +151,15 @@
   .chip.neutral .dot { background: var(--muted-soft); }
 
   /* ── KPI tiles ─────────────────────────────────────────────────────── */
-  .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-top: 18px; }
+  .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 260px)); gap: 14px;
+              margin-top: 18px; justify-content: stretch; }
+  @media (min-width: 900px) { .kpi-grid { grid-template-columns: repeat(4, 1fr); } }
   .kpi { border: 1px solid var(--border); border-radius: 11px; padding: 12px 14px; background: #fbfcfe; }
-  .kpi .num { font-size: 22px; font-weight: 800; letter-spacing: -.02em; }
+  .kpi .num { font-family: var(--font-mono); font-size: 22px; font-weight: 700; letter-spacing: -.01em; font-variant-numeric: tabular-nums; }
   .kpi.warn .num { color: var(--critical); }
   .kpi .lbl { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; margin-top: 2px; font-weight: 700; }
 
-  /* ── two-column chart row ──────────────────────────────────────────── */
+  /* ── three-column chart row ───────────────────────────────────────── */
   .chart-row { display: grid; grid-template-columns: 1.1fr 1fr 0.9fr; gap: 20px; }
   @media (max-width: 980px) { .chart-row { grid-template-columns: 1fr 1fr; } }
   @media (max-width: 620px) { .chart-row { grid-template-columns: 1fr; } }
@@ -135,7 +167,7 @@
   .law-bar-item:last-child { margin-bottom: 0; }
   .law-bar-head { display: flex; justify-content: space-between; font-size: 12.5px; margin-bottom: 5px; }
   .law-bar-head .name { font-weight: 700; }
-  .law-bar-head .score { color: var(--muted); font-weight: 700; }
+  .law-bar-head .score { font-family: var(--font-mono); color: var(--muted); font-weight: 600; font-variant-numeric: tabular-nums; }
   .law-bar-track { height: 9px; border-radius: 999px; background: var(--border-soft); overflow: hidden; }
   .law-bar-fill { height: 100%; border-radius: 999px; transition: width .4s ease; }
 
@@ -143,19 +175,19 @@
   .donut-center { position: relative; width: 150px; height: 150px; flex: none; }
   .donut-center svg { transform: rotate(-90deg); }
   .donut-center .center-label { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-  .donut-center .center-label .big { font-size: 22px; font-weight: 800; }
+  .donut-center .center-label .big { font-family: var(--font-mono); font-size: 22px; font-weight: 700; }
   .donut-center .center-label .small { font-size: 10.5px; color: var(--muted); text-align: center; line-height: 1.3; }
   .legend { display: flex; flex-direction: column; gap: 8px; font-size: 12.5px; }
   .legend-item { display: flex; align-items: center; gap: 8px; }
   .legend-item .sw { width: 10px; height: 10px; border-radius: 3px; flex: none; }
   .legend-item .lbl { color: var(--muted); flex: 1; }
-  .legend-item .val { font-weight: 700; }
+  .legend-item .val { font-family: var(--font-mono); font-weight: 700; font-variant-numeric: tabular-nums; }
 
   .section-title { font-size: 12.5px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 22px 0 10px; font-weight: 700; }
   .section-title:first-child { margin-top: 0; }
 
   /* ── findings ──────────────────────────────────────────────────────── */
-  .finding { border: 1px solid var(--border); border-left: 4px solid var(--info); border-radius: 10px;
+  .finding { border: 1px solid var(--border); border-left: 4px solid var(--muted-soft); border-radius: 10px;
              margin-bottom: 10px; overflow: hidden; background: #fff; }
   .f-critical { border-left-color: var(--critical); }
   .f-high { border-left-color: var(--high); }
@@ -164,7 +196,7 @@
   .finding-head {
     display: flex; align-items: center; gap: 10px; padding: 12px 14px; cursor: pointer; user-select: none;
   }
-  .sev-chip { font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em;
+  .sev-chip { font-family: var(--font-mono); font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em;
               padding: 3px 8px; border-radius: 6px; color: #fff; flex: none; }
   .sev-chip.critical { background: var(--critical); } .sev-chip.high { background: var(--high); }
   .sev-chip.medium { background: var(--medium); } .sev-chip.low { background: var(--low); }
@@ -177,7 +209,7 @@
   .finding-body .evidence-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em;
                                    color: var(--muted-soft); margin-top: 10px; }
   .finding-body .evidence { font-size: 12px; color: var(--text); background: #f7f8fa; border-radius: 8px;
-                             padding: 8px 10px; margin-top: 4px; white-space: pre-line; font-family: ui-monospace, Menlo, Consolas, monospace; }
+                             padding: 8px 10px; margin-top: 4px; white-space: pre-line; font-family: var(--font-mono); }
   .law-tags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
   .law-tag { font-size: 11px; font-weight: 700; background: var(--accent-soft); color: var(--accent-dark);
              padding: 3px 9px; border-radius: 999px; }
@@ -207,78 +239,68 @@
   .status-dot { width: 11px; height: 11px; border-radius: 50%; display: inline-block; cursor: help; }
   .status-dot.pass { background: var(--ok); } .status-dot.fail { background: var(--critical); }
   .status-dot.na { background: #e3e7ed; }
-
-  footer { text-align: center; color: var(--muted); font-size: 12px; padding: 24px; display: flex;
-           flex-direction: column; align-items: center; gap: 6px; }
-  footer .brand { transform: scale(0.85); }
-  a { color: var(--accent); }
 </style>
 </head>
 <body>
-<header>
-  <a class="brand" href="https://dkcissp.com" target="_blank" rel="noopener" aria-label="DKCISSP home">
-    <span class="brand-mark">DK</span>
-    <span class="brand-words"><span class="dk">DK</span><span class="cissp">CISSP</span></span>
-  </a>
-  <span class="divider">|</span>
-  <h1>Privacy Posture Assessment</h1>
-  <span class="divider">—</span>
-  <span class="tagline">assess a website's cookie-consent & privacy compliance, fully local</span>
-</header>
-<main>
-  <div class="panel">
-    <h2>Assess a website</h2>
-    <div class="scan-row">
-      <div class="field">
-        <label for="domain">Domain or URL</label>
-        <input type="text" id="domain" placeholder="example.com">
+<div class="app">
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <span class="brand-mark">DK</span>
+      <span class="brand-words">DK<span class="cissp">CISSP</span></span>
+    </div>
+    <div class="sidebar-sub">Privacy Posture Assessment — assess a website's cookie-consent & privacy compliance, fully local.</div>
+
+    <div class="scan-card">
+      <div class="label">Scan a new website</div>
+      <input type="text" id="domain" placeholder="example.com">
+      <div class="scan-opt"><input type="checkbox" id="no-headless"><label for="no-headless">Static HTTP check only</label></div>
+      <button class="scan-run" id="assess-btn">Run Assessment</button>
+      <div id="activity-log"></div>
+      <div class="sidebar-hint">
+        Checks third-party trackers, pre-consent cookies, consent-banner/CMP presence (incl. whether
+        "Reject All" actually blocks tracking), privacy-policy disclosures, "Do Not Sell or Share",
+        HTTPS/HSTS, and device fingerprinting — mapped to GDPR, CCPA/CPRA, CIPA, India DPDP, and PDPA.
       </div>
-      <button id="assess-btn">Run Assessment</button>
+      <div class="sidebar-scope">
+        <strong>Only assess domains you own or are authorized to test.</strong> Loads the page like
+        an ordinary visitor's browser — never logs in or submits forms. Nothing leaves this machine.
+      </div>
     </div>
-    <div class="checkbox-row">
-      <input type="checkbox" id="no-headless">
-      <label for="no-headless" style="margin:0;">Skip the headless-browser scan (static HTTP check only)</label>
-    </div>
-    <div class="hint">
-      Checks: third-party trackers, cookies set before consent, cookie-consent banner / CMP presence
-      (and whether "Reject All" actually blocks tracking — dynamic scan only), privacy-policy
-      disclosures, "Do Not Sell or Share" link, HTTPS/HSTS, and device fingerprinting. Findings are
-      mapped to GDPR, CCPA/CPRA, CIPA, India DPDP, and PDPA (Singapore) with the specific clause and
-      remediation steps. The dynamic scan needs a local Chrome/Chromium install; without one it falls
-      back to a static HTTP check automatically.
-    </div>
-    <div class="scope-notice">
-      <strong>Only assess domains you own or are authorized to test.</strong> This tool loads the
-      page the same way an ordinary visitor's browser would — it never logs in, submits forms, or
-      does anything beyond that. Nothing is sent to any third party; the scan runs entirely on your
-      own machine against the site you enter.
-    </div>
-  </div>
 
-  <div class="panel">
-    <div class="panel-head">
-      <h2>Result</h2>
-      <button id="export-csv-btn" class="btn-ghost" style="display:none;">Export CSV</button>
-    </div>
-    <div id="activity-log"></div>
-    <div id="result-placeholder">Risk, score, trackers, and clause-mapped findings will appear here.</div>
-    <div id="result" style="display:none;"></div>
-  </div>
+    <nav class="sidebar-nav">
+      <div class="nav-label">Workspace</div>
+      <button type="button" class="nav-item active" id="nav-dashboard">
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
+        Dashboard
+      </button>
+      <button type="button" class="nav-item" id="export-csv-btn" style="display:none;">
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg>
+        Export report (CSV)
+      </button>
+    </nav>
 
-  <div id="chart-row" class="chart-row" style="display:none;"></div>
-  <div id="findings-panel" class="panel" style="display:none;"></div>
-</main>
-<footer>
-  <a class="brand" href="https://dkcissp.com" target="_blank" rel="noopener" aria-label="DKCISSP home">
-    <span class="brand-mark">DK</span>
-    <span class="brand-words"><span class="dk">DK</span><span class="cissp">CISSP</span></span>
-  </a>
-  <div>
-    Privacy Posture Assessment — open-source, defensive, runs entirely on your own machine.
-    <a href="https://github.com/deepakkumarcissp/Public-Website-Privacy-Posture-Assessment" target="_blank" rel="noopener">Source on GitHub</a>
-    · <a href="https://dkcissp.com" target="_blank" rel="noopener">dkcissp.com</a>
-  </div>
-</footer>
+    <div class="sidebar-footer">
+      <a href="https://github.com/deepakkumarcissp/Public-Website-Privacy-Posture-Assessment" target="_blank" rel="noopener">Source on GitHub</a>
+      <a href="https://dkcissp.com" target="_blank" rel="noopener">dkcissp.com</a>
+      <div class="tag">Open-source · GPLv3 · runs entirely on your own machine</div>
+    </div>
+  </aside>
+
+  <main>
+    <div class="topbar">
+      <div class="topbar-title">Privacy Posture Dashboard</div>
+      <div class="topbar-sub" id="topbar-sub">Run an assessment to see the risk score, compliance charts, and findings here.</div>
+    </div>
+
+    <div class="panel">
+      <div id="result-placeholder">No assessment yet — enter a domain in the sidebar and click Run Assessment.</div>
+      <div id="result" style="display:none;"></div>
+    </div>
+
+    <div id="chart-row" class="chart-row" style="display:none;"></div>
+    <div id="findings-panel" class="panel" style="display:none;"></div>
+  </main>
+</div>
 <script>
 // Sent as an explicit header on every API call (never a URL/cookie) — a
 // cross-origin page cannot read this value, so it can't forge a request
@@ -289,6 +311,7 @@ const btn = document.getElementById('assess-btn');
 const resultEl = document.getElementById('result');
 const placeholderEl = document.getElementById('result-placeholder');
 const logEl = document.getElementById('activity-log');
+const topbarSubEl = document.getElementById('topbar-sub');
 
 function logLine(text, done) {
   const div = document.createElement('div');
@@ -415,6 +438,10 @@ function exportCsv() {
   URL.revokeObjectURL(url);
 }
 exportBtn.addEventListener('click', exportCsv);
+
+document.getElementById('nav-dashboard').addEventListener('click', () => {
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+});
 
 function renderHero(result) {
   const risk = (result.risk || 'unknown').toLowerCase();
@@ -561,12 +588,11 @@ function renderMatrix(result) {
   const matrix = site.matrix || [];
   const laws = result.matrix_laws || [];
   if (!matrix.length) return '';
-  const statusIcon = { pass: '✓', fail: '✕', na: '–' };
   const rows = matrix.map(row => {
     const cells = laws.map(law => {
       const st = row.per_law[law] || 'na';
       const title = row.clause_cell && row.clause_cell[law] ? row.clause_cell[law] : (st === 'na' ? 'Not applicable' : '');
-      return `<td style="text-align:center;"><span class="status-dot ${st}" title="${esc(title)}">${st !== 'na' ? '' : ''}</span></td>`;
+      return `<td style="text-align:center;"><span class="status-dot ${st}" title="${esc(title)}"></span></td>`;
     }).join('');
     return `<tr><td class="control-name">${esc(row.control)}</td>${cells}</tr>`;
   }).join('');
@@ -584,7 +610,7 @@ const findingsPanelEl = document.getElementById('findings-panel');
 
 function render(result) {
   lastResult = result;
-  exportBtn.style.display = 'inline-block';
+  exportBtn.style.display = 'flex';
   if (result.error) {
     resultEl.innerHTML = `<div class="finding f-high open"><div class="finding-head"><span class="sev-chip high">error</span><span class="title">Could not assess this site</span></div><div class="finding-body"><div class="detail">${esc(result.error)}</div></div></div>`;
     resultEl.style.display = 'block';
@@ -592,9 +618,11 @@ function render(result) {
     exportBtn.style.display = 'none';
     chartRowEl.style.display = 'none';
     findingsPanelEl.style.display = 'none';
+    topbarSubEl.textContent = `Could not assess ${result.domain || 'that site'}.`;
     return;
   }
 
+  topbarSubEl.textContent = `Last assessment of ${result.domain}`;
   resultEl.innerHTML = renderHero(result) + renderKpis(result);
   resultEl.style.display = 'block';
   placeholderEl.style.display = 'none';
@@ -674,6 +702,9 @@ btn.addEventListener('click', async () => {
       render(data);
       btn.disabled = false;
       btn.textContent = 'Run Assessment';
+      // The dashboard lives in the main pane; scroll it to the top so the
+      // result is immediately visible without the user hunting for it.
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     },
     onError: (msg) => {
       logLine(msg, false);
