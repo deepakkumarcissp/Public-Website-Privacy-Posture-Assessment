@@ -4,7 +4,15 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>DKCISSP Privacy Posture Assessment</title>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap">
+<!-- A Google Fonts <link> previously lived here. Even though this app's whole
+     pitch is "nothing leaves your machine," that tag silently sent every
+     visitor's IP/User-Agent to Google's font CDN on every page load -- a real
+     privacy leak in a privacy tool. Fonts are now the system stack only. The
+     Content-Security-Policy that locks this down (default-src/font-src/
+     connect-src/img-src 'self', frame-ancestors 'none') is set as a real HTTP
+     response header in webapp.py instead of a <meta> tag here, because
+     frame-ancestors (and some other directives) are silently ignored by
+     browsers when delivered via <meta> -- only a header actually enforces it. -->
 <style>
   :root {
     --bg: #f2f4f8; --panel: #ffffff; --border: #e3e7ed; --border-soft: #edf0f4;
@@ -14,9 +22,9 @@
     --ok: #1f9d55; --gap: #d1302f; --part: #d19a12; --att: #6b7bd1;
     --navy: #142238; --navy-2: #1b2d4a; --red: #c62834;
     --shadow: 0 1px 2px rgba(20,34,56,.04), 0 8px 24px -16px rgba(20,34,56,.12);
-    --font-head: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    --font-body: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    --font-mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+    --font-head: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
   }
   * { box-sizing: border-box; }
   html, body { height: 100%; }
