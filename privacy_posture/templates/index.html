@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DKCISSP Privacy Posture Assessment</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --panel: #ffffff; --border: #dde1e6; --text: #1b2330;
+    --muted: #5b6472; --accent: #2554e8; --accent-dark: #1a3fb5;
+    --critical: #c62828; --high: #e8650f; --medium: #c9a227; --low: #2a6fd6; --info: #6b7280;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg); color: var(--text);
+  }
+  header {
+    background: var(--panel); border-bottom: 1px solid var(--border);
+    padding: 14px 24px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  }
+  .brand { display: flex; align-items: center; gap: 8px; text-decoration: none; }
+  .brand-mark {
+    width: 30px; height: 30px; border-radius: 2px; background: #142238; color: #fff;
+    display: grid; place-items: center; font-family: Arial, sans-serif; font-weight: 900;
+    font-size: 12px; letter-spacing: 0.24px; flex: none;
+  }
+  .brand-words { font-family: Arial, sans-serif; font-weight: 900; font-size: 16px; letter-spacing: 0.16px; }
+  .brand-words .dk { color: #152238; }
+  .brand-words .cissp { color: #c62834; }
+  header h1 { font-size: 15px; margin: 0; font-weight: 600; }
+  header .tagline { color: var(--muted); font-size: 13px; }
+  header .divider { color: var(--border); }
+  main { max-width: 1100px; margin: 0 auto; padding: 24px 16px 60px; }
+  .panel {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 18px;
+    margin-bottom: 20px;
+  }
+  .panel h2 { font-size: 15px; margin: 0 0 12px; }
+  .scan-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
+  .scan-row .field { flex: 1; min-width: 220px; }
+  label { font-size: 12.5px; color: var(--muted); display: block; margin-bottom: 4px; }
+  input[type=text] {
+    width: 100%; padding: 9px 10px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px;
+  }
+  .checkbox-row { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--muted); margin-top: 10px; }
+  button {
+    background: var(--accent); color: #fff; border: none; border-radius: 8px;
+    padding: 10px 20px; font-size: 14px; cursor: pointer; font-weight: 600; white-space: nowrap;
+  }
+  button:hover { background: var(--accent-dark); }
+  button:disabled { opacity: .6; cursor: default; }
+  .hint { font-size: 12px; color: var(--muted); margin-top: 10px; line-height: 1.5; }
+  .scope-notice {
+    font-size: 12.5px; background: #fff7e6; border: 1px solid #f2d394; color: #7a5300;
+    padding: 10px 12px; border-radius: 8px; margin-top: 12px; line-height: 1.5;
+  }
+  #result-placeholder { color: var(--muted); font-size: 13px; }
+  .risk-badge {
+    display: inline-block; padding: 4px 12px; border-radius: 999px; color: #fff; font-weight: 700;
+    font-size: 13px; text-transform: uppercase; letter-spacing: .03em;
+  }
+  .r-critical { background: var(--critical); }
+  .r-high { background: var(--high); }
+  .r-medium { background: var(--medium); }
+  .r-low { background: #2e7d32; }
+  .stat-row { display: flex; gap: 18px; margin: 12px 0; font-size: 13px; color: var(--muted); flex-wrap: wrap; }
+  .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin: 14px 0; }
+  .kpi { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; }
+  .kpi .num { font-size: 20px; font-weight: 700; }
+  .kpi .lbl { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; }
+  .section-title { font-size: 12.5px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 18px 0 8px; }
+  .finding { border-left: 3px solid var(--info); padding: 10px 12px; margin-bottom: 8px; background: #fafbfc; border-radius: 0 6px 6px 0; }
+  .f-critical { border-color: var(--critical); }
+  .f-high { border-color: var(--high); }
+  .f-medium { border-color: var(--medium); }
+  .f-low { border-color: var(--low); }
+  .finding .title { font-weight: 600; font-size: 13px; }
+  .finding .detail { font-size: 12.5px; color: var(--muted); margin-top: 4px; white-space: pre-line; }
+  .finding .laws { font-size: 11.5px; color: var(--accent); margin-top: 6px; }
+  .finding .fix { font-size: 12px; color: var(--text); margin-top: 6px; white-space: pre-line; background: #f1f2f5; padding: 6px 8px; border-radius: 6px; }
+  .tp-item { display: flex; justify-content: space-between; border-bottom: 1px solid var(--border); padding: 6px 0; font-size: 12.5px; }
+  .tp-item:last-child { border-bottom: none; }
+  .tp-flags { color: var(--critical); font-size: 11px; }
+  #activity-log {
+    font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; background: #0f172a;
+    color: #c7d2e8; border-radius: 8px; padding: 10px 12px; max-height: 220px; overflow-y: auto;
+    display: none; margin-bottom: 14px;
+  }
+  #activity-log .line { padding: 2px 0; }
+  #activity-log .line::before { content: "› "; color: #5b7fd6; }
+  #activity-log .line.done { color: #6ee7a0; }
+  #activity-log .line.done::before { content: "✓ "; color: #6ee7a0; }
+  .spinner {
+    display: inline-block; width: 12px; height: 12px; border: 2px solid rgba(255,255,255,.4);
+    border-top-color: #fff; border-radius: 50%; animation: spin .7s linear infinite; margin-right: 6px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  footer { text-align: center; color: var(--muted); font-size: 12px; padding: 20px; display: flex;
+           flex-direction: column; align-items: center; gap: 6px; }
+  footer .brand { transform: scale(0.85); }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+<header>
+  <a class="brand" href="https://dkcissp.com" target="_blank" rel="noopener" aria-label="DKCISSP home">
+    <span class="brand-mark">DK</span>
+    <span class="brand-words"><span class="dk">DK</span><span class="cissp">CISSP</span></span>
+  </a>
+  <span class="divider">|</span>
+  <h1>Privacy Posture Assessment</h1>
+  <span class="divider">—</span>
+  <span class="tagline">assess a website's cookie-consent & privacy compliance, fully local</span>
+</header>
+<main>
+  <div class="panel">
+    <h2>Assess a website</h2>
+    <div class="scan-row">
+      <div class="field">
+        <label for="domain">Domain or URL</label>
+        <input type="text" id="domain" placeholder="example.com">
+      </div>
+      <button id="assess-btn">Run Assessment</button>
+    </div>
+    <div class="checkbox-row">
+      <input type="checkbox" id="no-headless">
+      <label for="no-headless" style="margin:0;">Skip the headless-browser scan (static HTTP check only)</label>
+    </div>
+    <div class="hint">
+      Checks: third-party trackers, cookies set before consent, cookie-consent banner / CMP presence
+      (and whether "Reject All" actually blocks tracking — dynamic scan only), privacy-policy
+      disclosures, "Do Not Sell or Share" link, HTTPS/HSTS, and device fingerprinting. Findings are
+      mapped to GDPR, CCPA/CPRA, CIPA, India DPDP, and PDPA (Singapore) with the specific clause and
+      remediation steps. The dynamic scan needs a local Chrome/Chromium install; without one it falls
+      back to a static HTTP check automatically.
+    </div>
+    <div class="scope-notice">
+      <strong>Only assess domains you own or are authorized to test.</strong> This tool loads the
+      page the same way an ordinary visitor's browser would — it never logs in, submits forms, or
+      does anything beyond that. Nothing is sent to any third party; the scan runs entirely on your
+      own machine against the site you enter.
+    </div>
+  </div>
+  <div class="panel">
+    <h2>Result</h2>
+    <div id="activity-log"></div>
+    <div id="result-placeholder">Risk, score, trackers, and clause-mapped findings will appear here.</div>
+    <div id="result" style="display:none;"></div>
+  </div>
+</main>
+<footer>
+  <a class="brand" href="https://dkcissp.com" target="_blank" rel="noopener" aria-label="DKCISSP home">
+    <span class="brand-mark">DK</span>
+    <span class="brand-words"><span class="dk">DK</span><span class="cissp">CISSP</span></span>
+  </a>
+  <div>
+    Privacy Posture Assessment — open-source, defensive, runs entirely on your own machine.
+    <a href="https://github.com/deepakkumarcissp/Public-Website-Privacy-Posture-Assessment" target="_blank" rel="noopener">Source on GitHub</a>
+    · <a href="https://dkcissp.com" target="_blank" rel="noopener">dkcissp.com</a>
+  </div>
+</footer>
+<script>
+const btn = document.getElementById('assess-btn');
+const resultEl = document.getElementById('result');
+const placeholderEl = document.getElementById('result-placeholder');
+const logEl = document.getElementById('activity-log');
+
+function logLine(text, done) {
+  const div = document.createElement('div');
+  div.className = 'line' + (done ? ' done' : '');
+  div.textContent = text;
+  logEl.appendChild(div);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+function esc(s) {
+  return (s ?? '').toString().replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function render(result) {
+  if (result.error) {
+    resultEl.innerHTML = `<div class="finding f-high"><div class="title">Could not assess this site</div><div class="detail">${esc(result.error)}</div></div>`;
+    resultEl.style.display = 'block';
+    placeholderEl.style.display = 'none';
+    return;
+  }
+  const risk = (result.risk || 'unknown').toLowerCase();
+  let html = '';
+  html += `<span class="risk-badge r-${esc(risk)}">${esc(result.risk)} risk</span>`;
+  html += `<div class="stat-row">
+    <div><strong>Domain:</strong> ${esc(result.domain)}</div>
+    <div><strong>Score:</strong> ${esc(result.score)}/100</div>
+    <div><strong>Scan mode:</strong> ${esc(result.scan_mode)}</div>
+    <div><strong>HTTPS:</strong> ${result.site.https ? 'yes' : 'no'}</div>
+    <div><strong>Consent banner:</strong> ${result.site.banner ? 'yes' : 'no'}${result.site.cmp ? ' (' + esc(result.site.cmp) + ')' : ''}</div>
+  </div>`;
+
+  const kpi = result.kpi || {};
+  html += `<div class="kpi-grid">
+    <div class="kpi"><div class="num">${kpi.trackers ?? 0}</div><div class="lbl">Third parties</div></div>
+    <div class="kpi"><div class="num">${kpi.preconsent ?? 0}</div><div class="lbl">Pre-consent cookies</div></div>
+    <div class="kpi"><div class="num">${kpi.forms ?? 0}</div><div class="lbl">Forms found</div></div>
+    <div class="kpi"><div class="num">${kpi.criticals ?? 0}</div><div class="lbl">Critical findings</div></div>
+  </div>`;
+
+  if (result.findings && result.findings.length) {
+    html += `<div class="section-title">Findings (${result.findings.length})</div>`;
+    for (const f of result.findings) {
+      html += `<div class="finding f-${esc(f.sev)}">
+        <div class="title">[${esc(f.sev.toUpperCase())}] ${esc(f.title)}</div>
+        <div class="detail">${esc(f.detail)}</div>
+        ${f.evidence ? `<div class="detail">Evidence: ${esc(f.evidence)}</div>` : ''}
+        <div class="laws">Laws: ${esc((f.laws || []).join(', '))}</div>
+        ${f.fix ? `<div class="fix">${esc(f.fix)}</div>` : ''}
+      </div>`;
+    }
+  } else {
+    html += `<div class="finding f-low"><div class="title">No privacy issues detected</div></div>`;
+  }
+
+  if (result.third_parties && result.third_parties.length) {
+    html += `<div class="section-title">Third parties (${result.third_parties.length})</div>`;
+    for (const t of result.third_parties) {
+      const flags = [];
+      if (t.trap_trace) flags.push('trap-and-trace');
+      if (t.wiretap) flags.push('wiretap');
+      html += `<div class="tp-item"><span>${esc(t.name)} <span style="color:var(--muted)">(${esc(t.category)})</span></span>${flags.length ? `<span class="tp-flags">${esc(flags.join(', '))}</span>` : ''}</div>`;
+    }
+  }
+
+  resultEl.innerHTML = html;
+  resultEl.style.display = 'block';
+  placeholderEl.style.display = 'none';
+}
+
+btn.addEventListener('click', () => {
+  const domain = document.getElementById('domain').value.trim();
+  const noHeadless = document.getElementById('no-headless').checked;
+  if (!domain) {
+    alert('Enter a domain first.');
+    return;
+  }
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>Assessing…';
+  logEl.innerHTML = '';
+  logEl.style.display = 'block';
+  resultEl.style.display = 'none';
+  placeholderEl.style.display = 'none';
+
+  const qs = new URLSearchParams({ domain, no_headless: noHeadless ? '1' : '0' });
+  const es = new EventSource('/api/assess-stream?' + qs.toString());
+
+  es.addEventListener('progress', (ev) => {
+    logLine(JSON.parse(ev.data));
+  });
+
+  es.addEventListener('result', (ev) => {
+    logLine('Assessment complete.', true);
+    const data = JSON.parse(ev.data);
+    render(data);
+    es.close();
+    btn.disabled = false;
+    btn.textContent = 'Run Assessment';
+  });
+
+  es.onerror = () => {
+    logLine('Connection to the local server was lost.', false);
+    es.close();
+    btn.disabled = false;
+    btn.textContent = 'Run Assessment';
+  };
+});
+</script>
+</body>
+</html>

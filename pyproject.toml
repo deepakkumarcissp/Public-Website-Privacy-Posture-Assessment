@@ -1,0 +1,48 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dkcissp-privacy-posture-assessment"
+version = "1.0.0"
+description = "Open-source website privacy/cookie-consent posture assessment, mapped to GDPR, CCPA/CPRA, CIPA, India DPDP, and PDPA — runs entirely on your own machine."
+readme = "README.md"
+license = { text = "GPL-3.0-or-later" }
+authors = [{ name = "Deepak Kumar (DKCISSP)" }]
+requires-python = ">=3.9"
+keywords = ["privacy", "gdpr", "ccpa", "cipa", "cookie-consent", "compliance", "infosec"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Information Technology",
+  "Topic :: Security",
+  "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+]
+dependencies = [
+  "requests>=2.28",
+]
+
+[project.optional-dependencies]
+web = ["flask>=2.3"]
+dynamic-scan = ["websocket-client>=1.5"]
+
+[project.urls]
+Homepage = "https://github.com/deepakkumarcissp/Public-Website-Privacy-Posture-Assessment"
+Issues = "https://github.com/deepakkumarcissp/Public-Website-Privacy-Posture-Assessment/issues"
+
+[project.scripts]
+dkcissp-privacy-assessment = "privacy_posture.cli:main"
+dkcissp-privacy-assessment-web = "privacy_posture.webapp:main"
+
+[tool.setuptools.packages.find]
+include = ["privacy_posture*"]
+
+[tool.setuptools.package-data]
+privacy_posture = ["templates/*.html"]
+
+[tool.pytest.ini_options]
+markers = ["network: test requires outbound network access"]
