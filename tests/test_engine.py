@@ -122,6 +122,13 @@ def test_ssrf_blocks_loopback_and_reserved_generically():
     assert _is_blocked_ip(ipaddress.ip_address("::1")) is True
 
 
+def test_resolve_pinned_ip_fails_closed_on_blocked_target():
+    from privacy_posture.engine import _resolve_pinned_ip
+    assert _resolve_pinned_ip("169.254.169.254") is None
+    assert _resolve_pinned_ip("this-domain-should-never-exist-dkcissp-test.invalid") is None
+    assert _resolve_pinned_ip("evil.com@169.254.169.254") is None
+
+
 def test_resolve_pinned_ip_returns_ipv4_for_safe_host():
     from privacy_posture.engine import _resolve_pinned_ip
     import socket as _socket
