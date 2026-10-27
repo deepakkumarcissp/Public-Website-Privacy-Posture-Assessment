@@ -195,11 +195,19 @@ def scan(url: str, settle: float = 4.0, consent: bool = True, gpc: bool = False,
     binp = _chromium_bin()
     port = _free_port()
     tmp = tempfile.mkdtemp(prefix="privscan_")
-    args = [binp, "--headless=new", "--disable-gpu", "--no-sandbox",
+    args = [binp, "--headless=new", "--disable-gpu",
             "--disable-dev-shm-usage", "--disable-extensions", "--mute-audio",
             "--disable-background-networking", "--no-first-run", "--no-default-browser-check",
             "--disable-features=Translate,BackForwardCache",
             f"--remote-debugging-port={port}", f"--user-data-dir={tmp}", "about:blank"]
+    # Chrome refuses to start as root without --no-sandbox, which disables its
+    # process sandbox — only add it when actually required (root/containers),
+    # never by default, since the browser visits untrusted third-party pages.
+    try:
+        if hasattr(os, "geteuid") and os.geteuid() == 0:
+            args.insert(3, "--no-sandbox")
+    except Exception:
+        pass
     proc = None
     cdp = _CDP(port)
     cdp._events = []
