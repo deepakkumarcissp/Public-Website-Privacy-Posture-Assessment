@@ -14,7 +14,8 @@ import pytest
 from privacy_posture import PrivacyPostureAssessor
 from privacy_posture import vendors as V
 from privacy_posture.clauses import enrich
-from privacy_posture.engine import _is_safe_target
+from privacy_posture.engine import _is_safe_target, _is_blocked_ip
+import ipaddress
 
 
 def test_vendor_detection_google_analytics():
@@ -86,6 +87,21 @@ def test_ssrf_blocks_unresolvable_host_fail_closed():
     assert _is_safe_target("this-domain-should-never-exist-dkcissp-test.invalid") is False
 
 
+def test_ssrf_blocks_ipv4_mapped_ipv6():
+    ip = ipaddress.ip_address("::ffff:169.254.169.254")
+    assert _is_blocked_ip(ip) is True
+
+
+def test_ssrf_blocks_nat64_embedded_metadata_ip():
+    ip = ipaddress.ip_address("64:ff9b::169.254.169.254")
+    assert _is_blocked_ip(ip) is True
+
+
+def test_ssrf_allows_ordinary_public_ip():
+    ip = ipaddress.ip_address("93.184.216.34")  # example.com-era public IP shape
+    assert _is_blocked_ip(ip) is False
+
+
 def test_ssrf_allows_plain_hostname_shape():
     # Shape-only check (no network call needed to prove the regex accepts a
     # normal domain) -- actual resolution is exercised by the network test.
@@ -106,3 +122,31 @@ def test_analyze_example_com():
     assert "score" in result
     assert "findings" in result
     assert "site" in result
+
+
+def test_csv_export_with_findings():
+    from privacy_posture.export import findings_to_csv
+    result = {
+        "domain": "example.com", "risk": "High", "score": 72, "scan_mode": "static",
+        "findings": [{"sev": "high", "title": "No privacy policy found/linked",
+                     "detail": "detail text", "evidence": "ev text",
+                     "laws": ["GDPR", "CCPA/CPRA"], "fix": "1. Do X"}],
+    }
+    csv_text = findings_to_csv(result)
+    assert "Domain,Risk,Score,Scan Mode,Severity,Finding,Detail,Evidence,Laws,Remediation Steps" in csv_text
+    assert "example.com" in csv_text
+    assert "No privacy policy found/linked" in csv_text
+    assert "GDPR; CCPA/CPRA" in csv_text
+
+
+def test_csv_export_with_no_findings():
+    from privacy_posture.export import findings_to_csv
+    result = {"domain": "example.com", "risk": "Low", "score": 100,
+             "scan_mode": "static", "findings": []}
+    csv_text = findings_to_csv(result)
+    assert "No privacy issues detected" in csv_text
+
+
+def test_cli_entrypoint_exists():
+    from privacy_posture.cli import main
+    assert callable(main)

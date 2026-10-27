@@ -143,7 +143,10 @@
     </div>
   </div>
   <div class="panel">
-    <h2>Result</h2>
+    <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
+      <h2 style="margin:0;">Result</h2>
+      <button id="export-csv-btn" style="display:none; background:#fff; color:var(--accent); border:1px solid var(--accent); padding:6px 14px; font-size:12.5px;">Export CSV</button>
+    </div>
     <div id="activity-log"></div>
     <div id="result-placeholder">Risk, score, trackers, and clause-mapped findings will appear here.</div>
     <div id="result" style="display:none;"></div>
@@ -179,11 +182,49 @@ function esc(s) {
   return (s ?? '').toString().replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
+let lastResult = null;
+const exportBtn = document.getElementById('export-csv-btn');
+
+function csvField(v) {
+  const s = (v ?? '').toString();
+  return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}
+
+function exportCsv() {
+  if (!lastResult || lastResult.error) return;
+  const rows = [['Domain', 'Risk', 'Score', 'Scan Mode', 'Severity', 'Finding', 'Detail',
+                'Evidence', 'Laws', 'Remediation Steps']];
+  const findings = lastResult.findings && lastResult.findings.length ? lastResult.findings : [null];
+  for (const f of findings) {
+    if (!f) {
+      rows.push([lastResult.domain, lastResult.risk, lastResult.score, lastResult.scan_mode,
+                'info', 'No privacy issues detected', '', '', '', '']);
+      continue;
+    }
+    rows.push([lastResult.domain, lastResult.risk, lastResult.score, lastResult.scan_mode,
+              f.sev, f.title, f.detail, f.evidence || '', (f.laws || []).join('; '), f.fix || '']);
+  }
+  const csv = rows.map(r => r.map(csvField).join(',')).join('\r\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `privacy-assessment-${(lastResult.domain || 'report').replace(/[^a-z0-9.-]/gi, '_')}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+exportBtn.addEventListener('click', exportCsv);
+
 function render(result) {
+  lastResult = result;
+  exportBtn.style.display = 'inline-block';
   if (result.error) {
     resultEl.innerHTML = `<div class="finding f-high"><div class="title">Could not assess this site</div><div class="detail">${esc(result.error)}</div></div>`;
     resultEl.style.display = 'block';
     placeholderEl.style.display = 'none';
+    exportBtn.style.display = 'none';
     return;
   }
   const risk = (result.risk || 'unknown').toLowerCase();
