@@ -161,6 +161,7 @@
   </div>
 </footer>
 <script>
+const SESSION_TOKEN = {{ session_token | tojson }};
 const btn = document.getElementById('assess-btn');
 const resultEl = document.getElementById('result');
 const placeholderEl = document.getElementById('result-placeholder');
@@ -248,7 +249,7 @@ btn.addEventListener('click', () => {
   resultEl.style.display = 'none';
   placeholderEl.style.display = 'none';
 
-  const qs = new URLSearchParams({ domain, no_headless: noHeadless ? '1' : '0' });
+  const qs = new URLSearchParams({ domain, no_headless: noHeadless ? '1' : '0', token: SESSION_TOKEN });
   const es = new EventSource('/api/assess-stream?' + qs.toString());
 
   es.addEventListener('progress', (ev) => {

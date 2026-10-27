@@ -115,6 +115,16 @@ for finding in result["findings"]:
 - Never follows the site's outbound tracker/ad links to their destination.
 - Nothing is sent to any third party by this tool itself — the only network traffic is your machine
   talking directly to the domain you entered.
+- Refuses to assess a domain that resolves to a cloud-provider instance-metadata address or a
+  link-local address (e.g. `169.254.169.254`) — these are never legitimate assessment targets and
+  this closes the clearest SSRF-abuse path. General private/internal addresses (your own intranet,
+  a local dev server) are still assessable, since testing your own internal site before it goes live
+  is a legitimate use of this tool.
+- The local web UI is unauthenticated by design (no login, for zero-friction local use), so it
+  binds to `127.0.0.1` only, rejects any request whose `Host` header isn't exactly
+  `127.0.0.1:<port>`/`localhost:<port>` (defeats DNS-rebinding), and requires a random per-run
+  session token on every scan-triggering request (defeats a malicious page in another browser tab
+  silently triggering scans via your browser). Don't expose this server beyond localhost.
 
 ## License
 

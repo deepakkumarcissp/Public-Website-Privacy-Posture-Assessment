@@ -32,9 +32,11 @@ you own or are authorized to test — see README.
 """
 from __future__ import annotations
 
+import ipaddress
 import re
+import socket
 from typing import Optional
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 
 try:
     import requests
@@ -88,6 +90,31 @@ _PII_PARAM = re.compile(
 
 def _sev_rank(s):
     return {"critical": 4, "high": 3, "medium": 2, "low": 1}.get((s or "").lower(), 0)
+
+
+# Cloud-provider instance-metadata endpoints. Never legitimate targets for a
+# privacy/cookie-consent assessment; blocking them closes off the clearest
+# SSRF-via-this-tool abuse case without restricting legitimate use against a
+# company's own internal/private web apps.
+_BLOCKED_SSRF_IPS = {"169.254.169.254", "100.100.100.200", "fd00:ec2::254"}
+_BLOCKED_SSRF_NETS = [ipaddress.ip_network("169.254.0.0/16"), ipaddress.ip_network("fe80::/10")]
+
+
+def _resolves_to_blocked_target(host: str) -> bool:
+    """True if `host` resolves to a cloud-metadata or link-local address."""
+    try:
+        infos = socket.getaddrinfo(host, None)
+    except Exception:
+        return False
+    for info in infos:
+        raw_ip = info[4][0].split("%")[0]
+        try:
+            ip = ipaddress.ip_address(raw_ip)
+        except ValueError:
+            continue
+        if str(ip) in _BLOCKED_SSRF_IPS or any(ip in net for net in _BLOCKED_SSRF_NETS):
+            return True
+    return False
 
 
 def _reg_domain(host: str) -> str:
@@ -184,6 +211,11 @@ class PrivacyPostureAssessor:
         out = {"url": url, "found": bool(url), "checks": {}, "missing": []}
         if not url:
             return out
+        policy_host = urlparse(url).hostname or ""
+        if policy_host and _resolves_to_blocked_target(policy_host):
+            out["found"] = False
+            out["url"] = ""
+            return out
         try:
             r = requests.get(url, headers=_UA, timeout=_TIMEOUT)
             t = (r.text or "").lower()
@@ -252,6 +284,10 @@ class PrivacyPostureAssessor:
                 "https": False, "hsts": False, "findings": [], "score": 0,
                 "risk": "Unknown", "scan_mode": "static", "consent_dyn": None,
                 "net_requests": []}
+        if _resolves_to_blocked_target(host):
+            site["blocked"] = True
+            self._progress(f"{host} resolves to a cloud instance-metadata/link-local address — refusing to assess it.")
+            return site
         html = ""; final = "https://" + host
         requests_seen = []; consent_dyn = None; cookies_dyn = None
         doc_headers = {}; fp_dyn = {}; post_reject = None; transfers_dyn = []
@@ -578,6 +614,10 @@ class PrivacyPostureAssessor:
         site = self._assess_site(domain)
         reachable = [site] if site["reachable"] else []
         if not reachable:
+            if site.get("blocked"):
+                return {"domain": domain, "reachable": False,
+                       "error": (f"{domain} resolves to a cloud instance-metadata or link-local "
+                                "address, which this tool refuses to assess.")}
             if site.get("tls_error"):
                 return {"domain": domain, "reachable": False,
                        "error": (f"{domain}'s HTTPS certificate failed validation and the site "
