@@ -6,86 +6,79 @@
 <title>DKCISSP Privacy Posture Assessment</title>
 <style>
   :root {
-    --bg: #f5f6f8; --panel: #ffffff; --border: #dde1e6; --text: #1b2330;
-    --muted: #5b6472; --accent: #2554e8; --accent-dark: #1a3fb5;
-    --critical: #c62828; --high: #e8650f; --medium: #c9a227; --low: #2a6fd6; --info: #6b7280;
+    --bg: #f3f5f8; --panel: #ffffff; --border: #e3e7ed; --border-soft: #edf0f4;
+    --text: #15202e; --muted: #6b7686; --muted-soft: #9aa3b0;
+    --accent: #2554e8; --accent-dark: #1a3fb5; --accent-soft: #eaf0ff;
+    --critical: #d1302f; --high: #e8650f; --medium: #c99a12; --low: #2a6fd6;
+    --ok: #1f9d55; --gap: #d1302f; --part: #d19a12; --att: #6b7bd1;
+    --navy: #142238; --red: #c62834;
+    --shadow: 0 1px 2px rgba(20,34,56,.04), 0 8px 24px -16px rgba(20,34,56,.12);
   }
   * { box-sizing: border-box; }
   body {
     margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    background: var(--bg); color: var(--text);
+    background: var(--bg); color: var(--text); -webkit-font-smoothing: antialiased;
   }
   header {
     background: var(--panel); border-bottom: 1px solid var(--border);
     padding: 14px 24px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    position: sticky; top: 0; z-index: 10;
   }
   .brand { display: flex; align-items: center; gap: 8px; text-decoration: none; }
   .brand-mark {
-    width: 30px; height: 30px; border-radius: 2px; background: #142238; color: #fff;
+    width: 30px; height: 30px; border-radius: 7px; background: var(--navy); color: #fff;
     display: grid; place-items: center; font-family: Arial, sans-serif; font-weight: 900;
     font-size: 12px; letter-spacing: 0.24px; flex: none;
   }
   .brand-words { font-family: Arial, sans-serif; font-weight: 900; font-size: 16px; letter-spacing: 0.16px; }
-  .brand-words .dk { color: #152238; }
-  .brand-words .cissp { color: #c62834; }
+  .brand-words .dk { color: var(--navy); }
+  .brand-words .cissp { color: var(--red); }
   header h1 { font-size: 15px; margin: 0; font-weight: 600; }
   header .tagline { color: var(--muted); font-size: 13px; }
   header .divider { color: var(--border); }
-  main { max-width: 1100px; margin: 0 auto; padding: 24px 16px 60px; }
+  main { max-width: 1180px; margin: 0 auto; padding: 24px 16px 60px; }
   .panel {
-    background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 18px;
-    margin-bottom: 20px;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 20px;
+    margin-bottom: 20px; box-shadow: var(--shadow);
   }
-  .panel h2 { font-size: 15px; margin: 0 0 12px; }
+  .panel h2 { font-size: 14.5px; margin: 0 0 14px; font-weight: 700; letter-spacing: -.01em; }
+  .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+  .panel-head h2 { margin: 0; }
+
+  /* ── scan form ─────────────────────────────────────────────────────── */
   .scan-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
   .scan-row .field { flex: 1; min-width: 220px; }
-  label { font-size: 12.5px; color: var(--muted); display: block; margin-bottom: 4px; }
+  label { font-size: 12.5px; color: var(--muted); display: block; margin-bottom: 4px; font-weight: 600; }
   input[type=text] {
-    width: 100%; padding: 9px 10px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px;
+    width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 9px; font-size: 14px;
+    background: #fbfcfe; transition: border-color .15s, box-shadow .15s;
   }
+  input[type=text]:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); background: #fff; }
   .checkbox-row { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--muted); margin-top: 10px; }
   button {
-    background: var(--accent); color: #fff; border: none; border-radius: 8px;
-    padding: 10px 20px; font-size: 14px; cursor: pointer; font-weight: 600; white-space: nowrap;
+    background: var(--accent); color: #fff; border: none; border-radius: 9px;
+    padding: 11px 22px; font-size: 14px; cursor: pointer; font-weight: 700; white-space: nowrap;
+    transition: background .15s, transform .1s;
   }
   button:hover { background: var(--accent-dark); }
+  button:active { transform: translateY(1px); }
   button:disabled { opacity: .6; cursor: default; }
-  .hint { font-size: 12px; color: var(--muted); margin-top: 10px; line-height: 1.5; }
+  .btn-ghost {
+    background: #fff; color: var(--accent); border: 1px solid var(--accent);
+    padding: 7px 16px; font-size: 12.5px; font-weight: 700;
+  }
+  .btn-ghost:hover { background: var(--accent-soft); }
+  .hint { font-size: 12px; color: var(--muted); margin-top: 10px; line-height: 1.6; }
   .scope-notice {
     font-size: 12.5px; background: #fff7e6; border: 1px solid #f2d394; color: #7a5300;
-    padding: 10px 12px; border-radius: 8px; margin-top: 12px; line-height: 1.5;
+    padding: 10px 12px; border-radius: 10px; margin-top: 12px; line-height: 1.55;
   }
-  #result-placeholder { color: var(--muted); font-size: 13px; }
-  .risk-badge {
-    display: inline-block; padding: 4px 12px; border-radius: 999px; color: #fff; font-weight: 700;
-    font-size: 13px; text-transform: uppercase; letter-spacing: .03em;
-  }
-  .r-critical { background: var(--critical); }
-  .r-high { background: var(--high); }
-  .r-medium { background: var(--medium); }
-  .r-low { background: #2e7d32; }
-  .stat-row { display: flex; gap: 18px; margin: 12px 0; font-size: 13px; color: var(--muted); flex-wrap: wrap; }
-  .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin: 14px 0; }
-  .kpi { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; }
-  .kpi .num { font-size: 20px; font-weight: 700; }
-  .kpi .lbl { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; }
-  .section-title { font-size: 12.5px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 18px 0 8px; }
-  .finding { border-left: 3px solid var(--info); padding: 10px 12px; margin-bottom: 8px; background: #fafbfc; border-radius: 0 6px 6px 0; }
-  .f-critical { border-color: var(--critical); }
-  .f-high { border-color: var(--high); }
-  .f-medium { border-color: var(--medium); }
-  .f-low { border-color: var(--low); }
-  .finding .title { font-weight: 600; font-size: 13px; }
-  .finding .detail { font-size: 12.5px; color: var(--muted); margin-top: 4px; white-space: pre-line; }
-  .finding .laws { font-size: 11.5px; color: var(--accent); margin-top: 6px; }
-  .finding .fix { font-size: 12px; color: var(--text); margin-top: 6px; white-space: pre-line; background: #f1f2f5; padding: 6px 8px; border-radius: 6px; }
-  .tp-item { display: flex; justify-content: space-between; border-bottom: 1px solid var(--border); padding: 6px 0; font-size: 12.5px; }
-  .tp-item:last-child { border-bottom: none; }
-  .tp-flags { color: var(--critical); font-size: 11px; }
+
+  /* ── activity log ──────────────────────────────────────────────────── */
   #activity-log {
-    font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; background: #0f172a;
-    color: #c7d2e8; border-radius: 8px; padding: 10px 12px; max-height: 220px; overflow-y: auto;
-    display: none; margin-bottom: 14px;
+    font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; background: #0b1220;
+    color: #c7d2e8; border-radius: 10px; padding: 12px 14px; max-height: 220px; overflow-y: auto;
+    display: none; margin-bottom: 18px;
   }
   #activity-log .line { padding: 2px 0; }
   #activity-log .line::before { content: "› "; color: #5b7fd6; }
@@ -96,7 +89,125 @@
     border-top-color: #fff; border-radius: 50%; animation: spin .7s linear infinite; margin-right: 6px;
   }
   @keyframes spin { to { transform: rotate(360deg); } }
-  footer { text-align: center; color: var(--muted); font-size: 12px; padding: 20px; display: flex;
+  #result-placeholder { color: var(--muted); font-size: 13px; }
+
+  /* ── hero summary ──────────────────────────────────────────────────── */
+  .hero { display: flex; gap: 28px; align-items: center; flex-wrap: wrap; }
+  .gauge-wrap { position: relative; width: 112px; height: 112px; flex: none; }
+  .gauge-wrap svg { transform: rotate(-90deg); }
+  .gauge-label { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .gauge-label .score { font-size: 26px; font-weight: 800; line-height: 1; }
+  .gauge-label .of100 { font-size: 10.5px; color: var(--muted); margin-top: 2px; }
+  .hero-main { flex: 1; min-width: 260px; }
+  .hero-title { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+  .hero-domain { font-size: 18px; font-weight: 800; letter-spacing: -.01em; }
+  .risk-badge {
+    display: inline-block; padding: 4px 12px; border-radius: 999px; color: #fff; font-weight: 700;
+    font-size: 12px; text-transform: uppercase; letter-spacing: .03em;
+  }
+  .r-critical { background: var(--critical); }
+  .r-high { background: var(--high); }
+  .r-medium { background: var(--medium); }
+  .r-low { background: var(--ok); }
+  .chip-row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600;
+    padding: 5px 10px; border-radius: 999px; background: #f1f3f7; color: var(--muted);
+    border: 1px solid var(--border-soft);
+  }
+  .chip .dot { width: 7px; height: 7px; border-radius: 50%; }
+  .chip.ok .dot { background: var(--ok); } .chip.ok { color: #0f6b38; background: #eafbf1; border-color: #cdeedb; }
+  .chip.bad .dot { background: var(--critical); } .chip.bad { color: #9c1f1f; background: #fdeceb; border-color: #f6cfcc; }
+  .chip.neutral .dot { background: var(--muted-soft); }
+
+  /* ── KPI tiles ─────────────────────────────────────────────────────── */
+  .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-top: 18px; }
+  .kpi { border: 1px solid var(--border); border-radius: 11px; padding: 12px 14px; background: #fbfcfe; }
+  .kpi .num { font-size: 22px; font-weight: 800; letter-spacing: -.02em; }
+  .kpi.warn .num { color: var(--critical); }
+  .kpi .lbl { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; margin-top: 2px; font-weight: 700; }
+
+  /* ── two-column chart row ──────────────────────────────────────────── */
+  .chart-row { display: grid; grid-template-columns: 1.3fr 1fr; gap: 20px; }
+  @media (max-width: 760px) { .chart-row { grid-template-columns: 1fr; } }
+  .law-bar-item { margin-bottom: 12px; }
+  .law-bar-item:last-child { margin-bottom: 0; }
+  .law-bar-head { display: flex; justify-content: space-between; font-size: 12.5px; margin-bottom: 5px; }
+  .law-bar-head .name { font-weight: 700; }
+  .law-bar-head .score { color: var(--muted); font-weight: 700; }
+  .law-bar-track { height: 9px; border-radius: 999px; background: var(--border-soft); overflow: hidden; }
+  .law-bar-fill { height: 100%; border-radius: 999px; transition: width .4s ease; }
+
+  .donut-row { display: flex; align-items: center; gap: 22px; flex-wrap: wrap; justify-content: center; }
+  .donut-center { position: relative; width: 150px; height: 150px; flex: none; }
+  .donut-center svg { transform: rotate(-90deg); }
+  .donut-center .center-label { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .donut-center .center-label .big { font-size: 22px; font-weight: 800; }
+  .donut-center .center-label .small { font-size: 10.5px; color: var(--muted); text-align: center; line-height: 1.3; }
+  .legend { display: flex; flex-direction: column; gap: 8px; font-size: 12.5px; }
+  .legend-item { display: flex; align-items: center; gap: 8px; }
+  .legend-item .sw { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+  .legend-item .lbl { color: var(--muted); flex: 1; }
+  .legend-item .val { font-weight: 700; }
+
+  .section-title { font-size: 12.5px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 22px 0 10px; font-weight: 700; }
+  .section-title:first-child { margin-top: 0; }
+
+  /* ── findings ──────────────────────────────────────────────────────── */
+  .finding { border: 1px solid var(--border); border-left: 4px solid var(--info); border-radius: 10px;
+             margin-bottom: 10px; overflow: hidden; background: #fff; }
+  .f-critical { border-left-color: var(--critical); }
+  .f-high { border-left-color: var(--high); }
+  .f-medium { border-left-color: var(--medium); }
+  .f-low { border-left-color: var(--low); }
+  .finding-head {
+    display: flex; align-items: center; gap: 10px; padding: 12px 14px; cursor: pointer; user-select: none;
+  }
+  .sev-chip { font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em;
+              padding: 3px 8px; border-radius: 6px; color: #fff; flex: none; }
+  .sev-chip.critical { background: var(--critical); } .sev-chip.high { background: var(--high); }
+  .sev-chip.medium { background: var(--medium); } .sev-chip.low { background: var(--low); }
+  .finding-head .title { font-weight: 700; font-size: 13.5px; flex: 1; }
+  .finding-head .chevron { color: var(--muted-soft); transition: transform .15s; flex: none; }
+  .finding.open .chevron { transform: rotate(90deg); }
+  .finding-body { display: none; padding: 0 14px 14px 14px; }
+  .finding.open .finding-body { display: block; }
+  .finding-body .detail { font-size: 12.5px; color: var(--muted); line-height: 1.6; white-space: pre-line; }
+  .finding-body .evidence-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em;
+                                   color: var(--muted-soft); margin-top: 10px; }
+  .finding-body .evidence { font-size: 12px; color: var(--text); background: #f7f8fa; border-radius: 8px;
+                             padding: 8px 10px; margin-top: 4px; white-space: pre-line; font-family: ui-monospace, Menlo, Consolas, monospace; }
+  .law-tags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+  .law-tag { font-size: 11px; font-weight: 700; background: var(--accent-soft); color: var(--accent-dark);
+             padding: 3px 9px; border-radius: 999px; }
+  .fix-list { font-size: 12.5px; margin-top: 10px; padding-left: 18px; line-height: 1.8; }
+
+  /* ── tables ────────────────────────────────────────────────────────── */
+  table.data-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  table.data-table th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .03em;
+                        color: var(--muted); font-weight: 700; padding: 8px 10px; border-bottom: 2px solid var(--border); }
+  table.data-table td { padding: 9px 10px; border-bottom: 1px solid var(--border-soft); vertical-align: top; }
+  table.data-table tr:last-child td { border-bottom: none; }
+  .flag-pill { display: inline-block; font-size: 10.5px; font-weight: 700; color: #9c1f1f; background: #fdeceb;
+               padding: 2px 7px; border-radius: 999px; margin-right: 4px; }
+
+  /* ── compliance matrix ────────────────────────────────────────────── */
+  details.matrix-wrap { margin-top: 4px; }
+  details.matrix-wrap > summary { cursor: pointer; font-size: 13px; color: var(--accent); font-weight: 700; list-style: none; padding: 4px 0; }
+  details.matrix-wrap > summary::-webkit-details-marker { display: none; }
+  details.matrix-wrap > summary::before { content: "▸ "; }
+  details.matrix-wrap[open] > summary::before { content: "▾ "; }
+  .matrix-scroll { overflow-x: auto; margin-top: 10px; }
+  table.matrix { border-collapse: collapse; font-size: 12px; min-width: 620px; width: 100%; }
+  table.matrix th { text-align: left; padding: 8px; background: #fafbfc; font-size: 10.5px; text-transform: uppercase;
+                    color: var(--muted); border-bottom: 2px solid var(--border); white-space: nowrap; }
+  table.matrix td { padding: 8px; border-bottom: 1px solid var(--border-soft); }
+  table.matrix td.control-name { font-weight: 600; min-width: 220px; }
+  .status-dot { width: 11px; height: 11px; border-radius: 50%; display: inline-block; cursor: help; }
+  .status-dot.pass { background: var(--ok); } .status-dot.fail { background: var(--critical); }
+  .status-dot.na { background: #e3e7ed; }
+
+  footer { text-align: center; color: var(--muted); font-size: 12px; padding: 24px; display: flex;
            flex-direction: column; align-items: center; gap: 6px; }
   footer .brand { transform: scale(0.85); }
   a { color: var(--accent); }
@@ -142,15 +253,19 @@
       own machine against the site you enter.
     </div>
   </div>
+
   <div class="panel">
-    <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
-      <h2 style="margin:0;">Result</h2>
-      <button id="export-csv-btn" style="display:none; background:#fff; color:var(--accent); border:1px solid var(--accent); padding:6px 14px; font-size:12.5px;">Export CSV</button>
+    <div class="panel-head">
+      <h2>Result</h2>
+      <button id="export-csv-btn" class="btn-ghost" style="display:none;">Export CSV</button>
     </div>
     <div id="activity-log"></div>
     <div id="result-placeholder">Risk, score, trackers, and clause-mapped findings will appear here.</div>
     <div id="result" style="display:none;"></div>
   </div>
+
+  <div id="chart-row" class="chart-row" style="display:none;"></div>
+  <div id="findings-panel" class="panel" style="display:none;"></div>
 </main>
 <footer>
   <a class="brand" href="https://dkcissp.com" target="_blank" rel="noopener" aria-label="DKCISSP home">
@@ -184,6 +299,43 @@ function logLine(text, done) {
 
 function esc(s) {
   return (s ?? '').toString().replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// ── small chart helpers (pure SVG/CSS, no external library — keeps the
+// "nothing leaves your machine" promise honest even for the UI itself) ──
+function scoreColor(score) {
+  if (score >= 80) return 'var(--ok)';
+  if (score >= 50) return 'var(--medium)';
+  return 'var(--critical)';
+}
+
+function gaugeSvg(score, size) {
+  const r = (size - 10) / 2, c = 2 * Math.PI * r, frac = Math.max(0, Math.min(100, score)) / 100;
+  const cx = size / 2, cy = size / 2;
+  return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+    <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="var(--border-soft)" stroke-width="9"/>
+    <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${scoreColor(score)}" stroke-width="9"
+      stroke-linecap="round" stroke-dasharray="${c}" stroke-dashoffset="${c * (1 - frac)}"/>
+  </svg>`;
+}
+
+function donutSvg(segments, size) {
+  // segments: [{value, color}], drawn as stacked arcs around a ring.
+  const r = (size - 24) / 2, c = 2 * Math.PI * r, cx = size / 2, cy = size / 2;
+  const total = segments.reduce((a, s) => a + s.value, 0) || 1;
+  let offset = 0, arcs = '';
+  for (const s of segments) {
+    if (s.value <= 0) continue;
+    const frac = s.value / total;
+    const len = c * frac;
+    arcs += `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${s.color}" stroke-width="18"
+      stroke-dasharray="${len} ${c - len}" stroke-dashoffset="${-offset}"/>`;
+    offset += len;
+  }
+  return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+    <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="var(--border-soft)" stroke-width="18"/>
+    ${arcs}
+  </svg>`;
 }
 
 let lastResult = null;
@@ -228,63 +380,174 @@ function exportCsv() {
 }
 exportBtn.addEventListener('click', exportCsv);
 
+function renderHero(result) {
+  const risk = (result.risk || 'unknown').toLowerCase();
+  const s = result.site || {};
+  const chips = [
+    { ok: s.https, textYes: 'HTTPS', textNo: 'No HTTPS' },
+    { ok: s.hsts, textYes: 'HSTS', textNo: 'No HSTS' },
+    { ok: s.banner, textYes: s.cmp ? `Consent banner (${s.cmp})` : 'Consent banner', textNo: 'No consent banner' },
+  ];
+  const chipHtml = chips.map(c => `<span class="chip ${c.ok ? 'ok' : 'bad'}"><span class="dot"></span>${esc(c.ok ? c.textYes : c.textNo)}</span>`).join('');
+  return `
+    <div class="hero">
+      <div class="gauge-wrap">
+        ${gaugeSvg(result.score, 112)}
+        <div class="gauge-label"><div class="score" style="color:${scoreColor(result.score)}">${esc(result.score)}</div><div class="of100">/ 100</div></div>
+      </div>
+      <div class="hero-main">
+        <div class="hero-title">
+          <span class="hero-domain">${esc(result.domain)}</span>
+          <span class="risk-badge r-${esc(risk)}">${esc(result.risk)} risk</span>
+          <span class="chip neutral"><span class="dot"></span>${esc(result.scan_mode)} scan</span>
+        </div>
+        <div class="chip-row">${chipHtml}</div>
+      </div>
+    </div>`;
+}
+
+function renderKpis(result) {
+  const kpi = result.kpi || {};
+  const tiles = [
+    { num: kpi.trackers ?? 0, lbl: 'Third parties' },
+    { num: kpi.preconsent ?? 0, lbl: 'Pre-consent cookies' },
+    { num: kpi.forms ?? 0, lbl: 'Forms found' },
+    { num: kpi.criticals ?? 0, lbl: 'Critical findings', warn: true },
+  ];
+  return `<div class="kpi-grid">${tiles.map(t =>
+    `<div class="kpi ${t.warn && t.num > 0 ? 'warn' : ''}"><div class="num">${esc(t.num)}</div><div class="lbl">${esc(t.lbl)}</div></div>`
+  ).join('')}</div>`;
+}
+
+function renderLawChart(result) {
+  const laws = result.laws || [];
+  const scores = result.law_scores || {};
+  const rows = laws.map(law => {
+    const score = scores[law] ?? 0;
+    return `<div class="law-bar-item">
+      <div class="law-bar-head"><span class="name">${esc(law)}</span><span class="score">${esc(score)}/100</span></div>
+      <div class="law-bar-track"><div class="law-bar-fill" style="width:${esc(score)}%; background:${scoreColor(score)}"></div></div>
+    </div>`;
+  }).join('');
+  return `<div class="panel"><h2>Compliance by law</h2>${rows}</div>`;
+}
+
+function renderCoverageDonut(result) {
+  const sum = result.catalog_summary || { ok: 0, gap: 0, part: 0, att: 0 };
+  const total = (sum.ok || 0) + (sum.gap || 0) + (sum.part || 0) + (sum.att || 0);
+  const segs = [
+    { value: sum.ok, color: 'var(--ok)', label: 'In place', key: 'ok' },
+    { value: sum.part, color: 'var(--part)', label: 'Partial', key: 'part' },
+    { value: sum.gap, color: 'var(--gap)', label: 'Gap', key: 'gap' },
+    { value: sum.att, color: 'var(--att)', label: 'Attestation needed', key: 'att' },
+  ];
+  // SVG can't read CSS vars in stroke directly in all contexts reliably when
+  // string-built like this, so resolve to literal hex here.
+  const colorMap = { ok: '#1f9d55', part: '#d19a12', gap: '#d1302f', att: '#6b7bd1' };
+  const svgSegs = segs.map(s => ({ value: s.value, color: colorMap[s.key] }));
+  const legend = segs.map(s => `<div class="legend-item"><span class="sw" style="background:${colorMap[s.key]}"></span>
+    <span class="lbl">${esc(s.label)}</span><span class="val">${esc(s.value)}</span></div>`).join('');
+  return `<div class="panel">
+    <h2>28-control coverage</h2>
+    <div class="donut-row">
+      <div class="donut-center">${donutSvg(svgSegs, 150)}
+        <div class="center-label"><div class="big">${esc(sum.ok)}/${esc(total)}</div><div class="small">controls<br>in place</div></div>
+      </div>
+      <div class="legend">${legend}</div>
+    </div>
+  </div>`;
+}
+
+function renderFindings(result) {
+  let html = `<div class="section-title">Top risks — act first (${(result.findings || []).length})</div>`;
+  if (result.findings && result.findings.length) {
+    result.findings.forEach((f, i) => {
+      html += `<div class="finding f-${esc(f.sev)} ${i === 0 ? 'open' : ''}" data-idx="${i}">
+        <div class="finding-head" onclick="this.parentElement.classList.toggle('open')">
+          <span class="sev-chip ${esc(f.sev)}">${esc(f.sev)}</span>
+          <span class="title">${esc(f.title)}</span>
+          <span class="chevron">▸</span>
+        </div>
+        <div class="finding-body">
+          <div class="detail">${esc(f.detail)}</div>
+          ${f.evidence ? `<div class="evidence-label">Evidence</div><div class="evidence">${esc(f.evidence)}</div>` : ''}
+          <div class="law-tags">${(f.laws || []).map(l => `<span class="law-tag">${esc(l)}</span>`).join('')}</div>
+          ${f.fix ? `<ol class="fix-list">${f.fix.split(/\d+\.\s+/).filter(Boolean).map(step => `<li>${esc(step.trim())}</li>`).join('')}</ol>` : ''}
+        </div>
+      </div>`;
+    });
+  } else {
+    html += `<div class="finding f-low open"><div class="finding-head"><span class="sev-chip low">clear</span><span class="title">No privacy issues detected</span></div></div>`;
+  }
+  return html;
+}
+
+function renderThirdParties(result) {
+  if (!result.third_parties || !result.third_parties.length) return '';
+  const rows = result.third_parties.map(t => {
+    const flags = [];
+    if (t.trap_trace) flags.push('trap-and-trace');
+    if (t.wiretap) flags.push('wiretap');
+    return `<tr>
+      <td><strong>${esc(t.name)}</strong></td>
+      <td>${esc(t.category)}</td>
+      <td>${esc(t.data || '')}</td>
+      <td>${flags.map(f => `<span class="flag-pill">${esc(f)}</span>`).join('') || '—'}</td>
+    </tr>`;
+  }).join('');
+  return `<div class="section-title">Third parties (${result.third_parties.length})</div>
+    <table class="data-table"><thead><tr><th>Name</th><th>Category</th><th>Data captured</th><th>Flags</th></tr></thead>
+    <tbody>${rows}</tbody></table>`;
+}
+
+function renderMatrix(result) {
+  const site = result.site || {};
+  const matrix = site.matrix || [];
+  const laws = result.matrix_laws || [];
+  if (!matrix.length) return '';
+  const statusIcon = { pass: '✓', fail: '✕', na: '–' };
+  const rows = matrix.map(row => {
+    const cells = laws.map(law => {
+      const st = row.per_law[law] || 'na';
+      const title = row.clause_cell && row.clause_cell[law] ? row.clause_cell[law] : (st === 'na' ? 'Not applicable' : '');
+      return `<td style="text-align:center;"><span class="status-dot ${st}" title="${esc(title)}">${st !== 'na' ? '' : ''}</span></td>`;
+    }).join('');
+    return `<tr><td class="control-name">${esc(row.control)}</td>${cells}</tr>`;
+  }).join('');
+  return `<details class="matrix-wrap">
+    <summary>Full compliance matrix (${matrix.length} controls × ${laws.length} laws)</summary>
+    <div class="matrix-scroll"><table class="matrix">
+      <thead><tr><th>Control</th>${laws.map(l => `<th style="text-align:center;">${esc(l)}</th>`).join('')}</tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>
+  </details>`;
+}
+
+const chartRowEl = document.getElementById('chart-row');
+const findingsPanelEl = document.getElementById('findings-panel');
+
 function render(result) {
   lastResult = result;
   exportBtn.style.display = 'inline-block';
   if (result.error) {
-    resultEl.innerHTML = `<div class="finding f-high"><div class="title">Could not assess this site</div><div class="detail">${esc(result.error)}</div></div>`;
+    resultEl.innerHTML = `<div class="finding f-high open"><div class="finding-head"><span class="sev-chip high">error</span><span class="title">Could not assess this site</span></div><div class="finding-body"><div class="detail">${esc(result.error)}</div></div></div>`;
     resultEl.style.display = 'block';
     placeholderEl.style.display = 'none';
     exportBtn.style.display = 'none';
+    chartRowEl.style.display = 'none';
+    findingsPanelEl.style.display = 'none';
     return;
   }
-  const risk = (result.risk || 'unknown').toLowerCase();
-  let html = '';
-  html += `<span class="risk-badge r-${esc(risk)}">${esc(result.risk)} risk</span>`;
-  html += `<div class="stat-row">
-    <div><strong>Domain:</strong> ${esc(result.domain)}</div>
-    <div><strong>Score:</strong> ${esc(result.score)}/100</div>
-    <div><strong>Scan mode:</strong> ${esc(result.scan_mode)}</div>
-    <div><strong>HTTPS:</strong> ${result.site.https ? 'yes' : 'no'}</div>
-    <div><strong>Consent banner:</strong> ${result.site.banner ? 'yes' : 'no'}${result.site.cmp ? ' (' + esc(result.site.cmp) + ')' : ''}</div>
-  </div>`;
 
-  const kpi = result.kpi || {};
-  html += `<div class="kpi-grid">
-    <div class="kpi"><div class="num">${kpi.trackers ?? 0}</div><div class="lbl">Third parties</div></div>
-    <div class="kpi"><div class="num">${kpi.preconsent ?? 0}</div><div class="lbl">Pre-consent cookies</div></div>
-    <div class="kpi"><div class="num">${kpi.forms ?? 0}</div><div class="lbl">Forms found</div></div>
-    <div class="kpi"><div class="num">${kpi.criticals ?? 0}</div><div class="lbl">Critical findings</div></div>
-  </div>`;
-
-  if (result.findings && result.findings.length) {
-    html += `<div class="section-title">Findings (${result.findings.length})</div>`;
-    for (const f of result.findings) {
-      html += `<div class="finding f-${esc(f.sev)}">
-        <div class="title">[${esc(f.sev.toUpperCase())}] ${esc(f.title)}</div>
-        <div class="detail">${esc(f.detail)}</div>
-        ${f.evidence ? `<div class="detail">Evidence: ${esc(f.evidence)}</div>` : ''}
-        <div class="laws">Laws: ${esc((f.laws || []).join(', '))}</div>
-        ${f.fix ? `<div class="fix">${esc(f.fix)}</div>` : ''}
-      </div>`;
-    }
-  } else {
-    html += `<div class="finding f-low"><div class="title">No privacy issues detected</div></div>`;
-  }
-
-  if (result.third_parties && result.third_parties.length) {
-    html += `<div class="section-title">Third parties (${result.third_parties.length})</div>`;
-    for (const t of result.third_parties) {
-      const flags = [];
-      if (t.trap_trace) flags.push('trap-and-trace');
-      if (t.wiretap) flags.push('wiretap');
-      html += `<div class="tp-item"><span>${esc(t.name)} <span style="color:var(--muted)">(${esc(t.category)})</span></span>${flags.length ? `<span class="tp-flags">${esc(flags.join(', '))}</span>` : ''}</div>`;
-    }
-  }
-
-  resultEl.innerHTML = html;
+  resultEl.innerHTML = renderHero(result) + renderKpis(result);
   resultEl.style.display = 'block';
   placeholderEl.style.display = 'none';
+
+  chartRowEl.innerHTML = renderLawChart(result) + renderCoverageDonut(result);
+  chartRowEl.style.display = 'grid';
+
+  findingsPanelEl.innerHTML = renderFindings(result) + renderThirdParties(result) + renderMatrix(result);
+  findingsPanelEl.style.display = 'block';
 }
 
 // Minimal hand-rolled parser for the server's "event: X\ndata: Y\n\n" stream,
@@ -345,6 +608,8 @@ btn.addEventListener('click', async () => {
   logEl.style.display = 'block';
   resultEl.style.display = 'none';
   placeholderEl.style.display = 'none';
+  chartRowEl.style.display = 'none';
+  findingsPanelEl.style.display = 'none';
 
   await streamAssessment(domain, noHeadless, {
     onProgress: (msg) => logLine(msg),
