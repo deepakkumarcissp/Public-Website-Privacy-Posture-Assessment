@@ -36,7 +36,7 @@
   header h1 { font-size: 15px; margin: 0; font-weight: 600; }
   header .tagline { color: var(--muted); font-size: 13px; }
   header .divider { color: var(--border); }
-  main { max-width: 1180px; margin: 0 auto; padding: 24px 16px 60px; }
+  main { max-width: 1320px; margin: 0 auto; padding: 24px 24px 60px; }
   .panel {
     background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 20px;
     margin-bottom: 20px; box-shadow: var(--shadow);
@@ -128,8 +128,9 @@
   .kpi .lbl { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; margin-top: 2px; font-weight: 700; }
 
   /* ── two-column chart row ──────────────────────────────────────────── */
-  .chart-row { display: grid; grid-template-columns: 1.3fr 1fr; gap: 20px; }
-  @media (max-width: 760px) { .chart-row { grid-template-columns: 1fr; } }
+  .chart-row { display: grid; grid-template-columns: 1.1fr 1fr 0.9fr; gap: 20px; }
+  @media (max-width: 980px) { .chart-row { grid-template-columns: 1fr 1fr; } }
+  @media (max-width: 620px) { .chart-row { grid-template-columns: 1fr; } }
   .law-bar-item { margin-bottom: 12px; }
   .law-bar-item:last-child { margin-bottom: 0; }
   .law-bar-head { display: flex; justify-content: space-between; font-size: 12.5px; margin-bottom: 5px; }
@@ -341,8 +342,16 @@ function donutSvg(segments, size) {
 let lastResult = null;
 const exportBtn = document.getElementById('export-csv-btn');
 
+function flattenCell(v) {
+  // Collapse embedded newlines (e.g. a multi-line beacon-URL evidence block)
+  // to a single visual row per finding — technically valid as a quoted
+  // multi-line CSV cell, but looks like data went missing when skimmed in a
+  // plain text editor or a spreadsheet that doesn't render tall cells clearly.
+  return (v ?? '').toString().replace(/\r\n|\r|\n/g, ' | ');
+}
+
 function csvField(v) {
-  let s = (v ?? '').toString();
+  let s = flattenCell(v);
   // Defuse CSV/formula injection (CWE-1236): a cell whose content happens to
   // start with =, +, -, @, tab, or CR is interpreted as a formula by Excel/
   // Sheets when the file is opened. No current field can start with
@@ -355,19 +364,46 @@ function csvField(v) {
 
 function exportCsv() {
   if (!lastResult || lastResult.error) return;
-  const rows = [['Domain', 'Risk', 'Score', 'Scan Mode', 'Severity', 'Finding', 'Detail',
-                'Evidence', 'Laws', 'Remediation Steps']];
-  const findings = lastResult.findings && lastResult.findings.length ? lastResult.findings : [null];
-  for (const f of findings) {
-    if (!f) {
-      rows.push([lastResult.domain, lastResult.risk, lastResult.score, lastResult.scan_mode,
-                'info', 'No privacy issues detected', '', '', '', '']);
-      continue;
-    }
-    rows.push([lastResult.domain, lastResult.risk, lastResult.score, lastResult.scan_mode,
-              f.sev, f.title, f.detail, f.evidence || '', (f.laws || []).join('; '), f.fix || '']);
+  const r = lastResult, site = r.site || {}, kpi = r.kpi || {};
+  const rows = [];
+  rows.push(['DKCISSP Privacy Posture Assessment']);
+  rows.push(['Domain', r.domain]);
+  rows.push(['Risk', r.risk]);
+  rows.push(['Score', r.score]);
+  rows.push(['Scan Mode', r.scan_mode]);
+  rows.push(['HTTPS', site.https ? 'Yes' : 'No']);
+  rows.push(['HSTS', site.hsts ? 'Yes' : 'No']);
+  rows.push(['Consent Banner', site.banner ? 'Yes' : 'No']);
+  rows.push(['CMP', site.cmp || '']);
+  rows.push(['Third Parties', kpi.trackers ?? 0]);
+  rows.push(['Pre-consent Cookies', kpi.preconsent ?? 0]);
+  rows.push(['Forms Found', kpi.forms ?? 0]);
+  rows.push(['Critical Findings', kpi.criticals ?? 0]);
+  rows.push([]);
+
+  if (r.laws && r.laws.length) {
+    rows.push(['Compliance by Law']);
+    rows.push(['Law', 'Score']);
+    for (const law of r.laws) rows.push([law, (r.law_scores || {})[law] ?? '']);
+    rows.push([]);
   }
-  const csv = rows.map(r => r.map(csvField).join(',')).join('\r\n');
+
+  rows.push(['Findings']);
+  rows.push(['Severity', 'Finding', 'Detail', 'Evidence', 'Laws', 'Remediation Steps']);
+  const findings = r.findings && r.findings.length ? r.findings : [null];
+  for (const f of findings) {
+    if (!f) { rows.push(['info', 'No privacy issues detected', '', '', '', '']); continue; }
+    rows.push([f.sev, f.title, f.detail, f.evidence || '', (f.laws || []).join('; '), f.fix || '']);
+  }
+
+  if (r.third_parties && r.third_parties.length) {
+    rows.push([]);
+    rows.push(['Third Parties']);
+    rows.push(['Name', 'Category', 'Trap-and-Trace', 'Wiretap']);
+    for (const t of r.third_parties) rows.push([t.name, t.category, t.trap_trace ? 'Yes' : 'No', t.wiretap ? 'Yes' : 'No']);
+  }
+
+  const csv = rows.map(row => row.map(csvField).join(',')).join('\r\n');
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -458,6 +494,26 @@ function renderCoverageDonut(result) {
   </div>`;
 }
 
+function renderSeverityChart(result) {
+  const sc = result.sev_counts || { Critical: 0, High: 0, Medium: 0, Low: 0 };
+  const rows = [
+    { key: 'Critical', color: 'var(--critical)' },
+    { key: 'High', color: 'var(--high)' },
+    { key: 'Medium', color: 'var(--medium)' },
+    { key: 'Low', color: 'var(--low)' },
+  ];
+  const max = Math.max(1, ...rows.map(r => sc[r.key] || 0));
+  const bars = rows.map(r => {
+    const v = sc[r.key] || 0;
+    const pct = Math.round((v / max) * 100);
+    return `<div class="law-bar-item">
+      <div class="law-bar-head"><span class="name">${esc(r.key)}</span><span class="score">${esc(v)}</span></div>
+      <div class="law-bar-track"><div class="law-bar-fill" style="width:${pct}%; background:${r.color}"></div></div>
+    </div>`;
+  }).join('');
+  return `<div class="panel"><h2>Findings by severity</h2>${bars}</div>`;
+}
+
 function renderFindings(result) {
   let html = `<div class="section-title">Top risks — act first (${(result.findings || []).length})</div>`;
   if (result.findings && result.findings.length) {
@@ -543,7 +599,7 @@ function render(result) {
   resultEl.style.display = 'block';
   placeholderEl.style.display = 'none';
 
-  chartRowEl.innerHTML = renderLawChart(result) + renderCoverageDonut(result);
+  chartRowEl.innerHTML = renderLawChart(result) + renderCoverageDonut(result) + renderSeverityChart(result);
   chartRowEl.style.display = 'grid';
 
   findingsPanelEl.innerHTML = renderFindings(result) + renderThirdParties(result) + renderMatrix(result);
