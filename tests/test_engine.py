@@ -14,6 +14,7 @@ import pytest
 from privacy_posture import PrivacyPostureAssessor
 from privacy_posture import vendors as V
 from privacy_posture.clauses import enrich
+from privacy_posture.engine import _is_safe_target
 
 
 def test_vendor_detection_google_analytics():
@@ -64,6 +65,35 @@ def test_analyze_rejects_empty_input():
     a = PrivacyPostureAssessor()
     result = a.analyze("")
     assert "error" in result
+
+
+def test_ssrf_blocks_metadata_ip_literal():
+    assert _is_safe_target("169.254.169.254") is False
+
+
+def test_ssrf_blocks_link_local_range():
+    assert _is_safe_target("169.254.1.1") is False
+
+
+def test_ssrf_blocks_userinfo_parser_differential():
+    # requests/urllib3 would treat this as a request to 169.254.169.254 with
+    # 'evil.com' as discarded userinfo -- our hostname-character check must
+    # reject it outright rather than naively resolving 'evil.com'.
+    assert _is_safe_target("evil.com@169.254.169.254") is False
+
+
+def test_ssrf_blocks_unresolvable_host_fail_closed():
+    assert _is_safe_target("this-domain-should-never-exist-dkcissp-test.invalid") is False
+
+
+def test_ssrf_allows_plain_hostname_shape():
+    # Shape-only check (no network call needed to prove the regex accepts a
+    # normal domain) -- actual resolution is exercised by the network test.
+    from privacy_posture.engine import _VALID_HOSTNAME
+    assert _VALID_HOSTNAME.match("example.com")
+    assert _VALID_HOSTNAME.match("sub.example.co.uk")
+    assert not _VALID_HOSTNAME.match("evil.com@169.254.169.254")
+    assert not _VALID_HOSTNAME.match("example.com:8080")
 
 
 @pytest.mark.network
