@@ -164,7 +164,10 @@
   </div>
 </footer>
 <script>
-const SESSION_TOKEN = {{ session_token | tojson }};
+// No token is embedded here — it's delivered as an HttpOnly cookie the
+// browser attaches automatically to same-origin requests (including the
+// EventSource call below), so it never appears in a URL, browser history,
+// or the server's own access log.
 const btn = document.getElementById('assess-btn');
 const resultEl = document.getElementById('result');
 const placeholderEl = document.getElementById('result-placeholder');
@@ -186,7 +189,14 @@ let lastResult = null;
 const exportBtn = document.getElementById('export-csv-btn');
 
 function csvField(v) {
-  const s = (v ?? '').toString();
+  let s = (v ?? '').toString();
+  // Defuse CSV/formula injection (CWE-1236): a cell whose content happens to
+  // start with =, +, -, @, tab, or CR is interpreted as a formula by Excel/
+  // Sheets when the file is opened. No current field can start with
+  // assessed-site-controlled content, but this doesn't rely on that holding
+  // true forever — prefix with a single quote, which Excel displays as plain
+  // text and strips the formula interpretation, at negligible readability cost.
+  if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
   return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
 }
 
@@ -290,7 +300,7 @@ btn.addEventListener('click', () => {
   resultEl.style.display = 'none';
   placeholderEl.style.display = 'none';
 
-  const qs = new URLSearchParams({ domain, no_headless: noHeadless ? '1' : '0', token: SESSION_TOKEN });
+  const qs = new URLSearchParams({ domain, no_headless: noHeadless ? '1' : '0' });
   const es = new EventSource('/api/assess-stream?' + qs.toString());
 
   es.addEventListener('progress', (ev) => {

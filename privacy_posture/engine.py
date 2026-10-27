@@ -211,6 +211,35 @@ def _is_safe_target(host: str) -> bool:
 
 
 _MAX_REDIRECTS = 5
+_MAX_BODY_BYTES = 10 * 1024 * 1024  # 10 MB — generous for any real page
+
+
+def _capped_get(url: str, **kwargs):
+    """requests.get() with a hard cap on how much response body is ever held
+    in memory (CWE-400). Also refuses compressed transfer encodings: without
+    that, a response of only a few KB on the wire could decompress to
+    gigabytes before our byte cap below ever sees it (CWE-409, a
+    "decompression bomb") — safer to just not negotiate compression for a
+    one-shot page fetch than to try to cap post-decompression size."""
+    headers = dict(kwargs.pop("headers", None) or {})
+    headers.setdefault("Accept-Encoding", "identity")
+    kwargs["headers"] = headers
+    kwargs["stream"] = True
+    resp = requests.get(url, **kwargs)
+    try:
+        chunks, total = [], 0
+        for chunk in resp.iter_content(chunk_size=65536):
+            if not chunk:
+                continue
+            chunks.append(chunk)
+            total += len(chunk)
+            if total >= _MAX_BODY_BYTES:
+                break
+        resp._content = b"".join(chunks)
+        resp._content_consumed = True
+    finally:
+        resp.close()
+    return resp
 
 
 def _safe_get(url: str, **kwargs):
@@ -224,7 +253,7 @@ def _safe_get(url: str, **kwargs):
         host = urlparse(url).hostname or ""
         if not _is_safe_target(host):
             return None
-        r = requests.get(url, **kwargs)
+        r = _capped_get(url, **kwargs)
         if r.is_redirect or r.is_permanent_redirect:
             location = r.headers.get("Location")
             if not location:

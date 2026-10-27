@@ -50,6 +50,13 @@ def available() -> bool:
     return _HAVE_WS and bool(_chromium_bin())
 
 
+# Defensive cap on the captured DOM, independent of the websocket's own
+# per-message cap above — keeps a single enormous document from ballooning
+# memory in every downstream consumer (regex scanning, the returned result,
+# the HTTP/CSV response) even if the transport itself allowed it through.
+_MAX_HTML_CHARS = 10_000_000
+
+
 def _free_port() -> int:
     s = socket.socket()
     s.bind(("127.0.0.1", 0))
@@ -81,7 +88,11 @@ class _CDP:
             return False
         # Chromium >=111 rejects the WS upgrade if an Origin header is present
         # (hardening against websites poking the debug port) → suppress_origin.
-        self.ws = websocket.create_connection(url, max_size=None,
+        # max_size caps any single CDP message (e.g. a Runtime.evaluate result
+        # carrying a huge DOM) rather than leaving it unbounded (CWE-400) — a
+        # malicious assessed page could otherwise drive this process's memory
+        # up via an enormous document. 64MB comfortably covers any real page.
+        self.ws = websocket.create_connection(url, max_size=64 * 1024 * 1024,
                                                enable_multithread=True, timeout=30,
                                                suppress_origin=True)
         tid = self.send("Target.createTarget", {"url": "about:blank"}).get("targetId")
@@ -255,7 +266,7 @@ def scan(url: str, settle: float = 4.0, consent: bool = True, gpc: bool = False,
         try:
             r = cdp.send("Runtime.evaluate",
                          {"expression": "document.documentElement.outerHTML", "returnByValue": True})
-            html = ((r.get("result") or {}).get("value") or "")
+            html = ((r.get("result") or {}).get("value") or "")[:_MAX_HTML_CHARS]
         except Exception:
             pass
         final_url = url
