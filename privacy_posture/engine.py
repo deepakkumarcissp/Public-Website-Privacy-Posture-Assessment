@@ -98,23 +98,62 @@ def _sev_rank(s):
 # company's own internal/private web apps.
 _BLOCKED_SSRF_IPS = {"169.254.169.254", "100.100.100.200", "fd00:ec2::254"}
 _BLOCKED_SSRF_NETS = [ipaddress.ip_network("169.254.0.0/16"), ipaddress.ip_network("fe80::/10")]
+_VALID_HOSTNAME = re.compile(r"^[A-Za-z0-9]([A-Za-z0-9-]{0,62}\.)*[A-Za-z0-9]([A-Za-z0-9-]{0,62})?$")
 
 
-def _resolves_to_blocked_target(host: str) -> bool:
-    """True if `host` resolves to a cloud-metadata or link-local address."""
+def _is_safe_target(host: str) -> bool:
+    """True only if `host` is a syntactically plain hostname (no userinfo,
+    port, or other characters a URL parser could interpret differently than
+    this check does — e.g. 'evil.com@169.254.169.254', which requests/urllib3
+    would treat as a request to 169.254.169.254 with 'evil.com@' as userinfo)
+    AND it resolves to an address that is not cloud-metadata/link-local.
+
+    Fails CLOSED: a hostname that doesn't match the allowed character set, or
+    that fails to resolve at all, is treated as unsafe rather than allowed
+    through. (A genuinely-unreachable domain still gets a clear "could not
+    reach" error later — it just never reaches the network layer first.)"""
+    if not host or not _VALID_HOSTNAME.match(host):
+        return False
     try:
         infos = socket.getaddrinfo(host, None)
     except Exception:
+        return False
+    if not infos:
         return False
     for info in infos:
         raw_ip = info[4][0].split("%")[0]
         try:
             ip = ipaddress.ip_address(raw_ip)
         except ValueError:
-            continue
+            return False
         if str(ip) in _BLOCKED_SSRF_IPS or any(ip in net for net in _BLOCKED_SSRF_NETS):
-            return True
-    return False
+            return False
+    return True
+
+
+_MAX_REDIRECTS = 5
+
+
+def _safe_get(url: str, **kwargs):
+    """GET with redirects followed manually, re-validating the target host at
+    EVERY hop. requests' built-in allow_redirects=True would otherwise let an
+    initially-safe host 30x-redirect the request straight to an internal or
+    cloud-metadata address without our check ever seeing it."""
+    kwargs.setdefault("timeout", _TIMEOUT)
+    kwargs["allow_redirects"] = False
+    for _ in range(_MAX_REDIRECTS + 1):
+        host = urlparse(url).hostname or ""
+        if not _is_safe_target(host):
+            return None
+        r = requests.get(url, **kwargs)
+        if r.is_redirect or r.is_permanent_redirect:
+            location = r.headers.get("Location")
+            if not location:
+                return r
+            url = urljoin(url, location)
+            continue
+        return r
+    return None  # too many redirects
 
 
 def _reg_domain(host: str) -> str:
@@ -190,8 +229,9 @@ class PrivacyPostureAssessor:
         tls_error = False
         for scheme in ("https://", "http://"):
             try:
-                return requests.get(scheme + host, headers=_UA, timeout=_TIMEOUT,
-                                    allow_redirects=True), tls_error
+                r = _safe_get(scheme + host, headers=_UA)
+                if r is not None:
+                    return r, tls_error
             except requests.exceptions.SSLError:
                 tls_error = True
                 continue
@@ -211,13 +251,11 @@ class PrivacyPostureAssessor:
         out = {"url": url, "found": bool(url), "checks": {}, "missing": []}
         if not url:
             return out
-        policy_host = urlparse(url).hostname or ""
-        if policy_host and _resolves_to_blocked_target(policy_host):
-            out["found"] = False
-            out["url"] = ""
-            return out
         try:
-            r = requests.get(url, headers=_UA, timeout=_TIMEOUT)
+            r = _safe_get(url, headers=_UA)
+            if r is None:
+                out["found"] = False
+                return out
             t = (r.text or "").lower()
         except Exception:
             out["found"] = False
@@ -284,9 +322,10 @@ class PrivacyPostureAssessor:
                 "https": False, "hsts": False, "findings": [], "score": 0,
                 "risk": "Unknown", "scan_mode": "static", "consent_dyn": None,
                 "net_requests": []}
-        if _resolves_to_blocked_target(host):
+        if not _is_safe_target(host):
             site["blocked"] = True
-            self._progress(f"{host} resolves to a cloud instance-metadata/link-local address — refusing to assess it.")
+            self._progress(f"Could not safely validate {host} (it did not resolve, or resolves to "
+                           "a disallowed cloud-metadata/link-local address) — refusing to assess it.")
             return site
         html = ""; final = "https://" + host
         requests_seen = []; consent_dyn = None; cookies_dyn = None
@@ -616,8 +655,9 @@ class PrivacyPostureAssessor:
         if not reachable:
             if site.get("blocked"):
                 return {"domain": domain, "reachable": False,
-                       "error": (f"{domain} resolves to a cloud instance-metadata or link-local "
-                                "address, which this tool refuses to assess.")}
+                       "error": (f"Could not safely validate {domain} — it either did not resolve, "
+                                "contains characters not allowed in a plain hostname, or resolves "
+                                "to a cloud instance-metadata/link-local address.")}
             if site.get("tls_error"):
                 return {"domain": domain, "reachable": False,
                        "error": (f"{domain}'s HTTPS certificate failed validation and the site "

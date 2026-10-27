@@ -119,7 +119,15 @@ for finding in result["findings"]:
   link-local address (e.g. `169.254.169.254`) — these are never legitimate assessment targets and
   this closes the clearest SSRF-abuse path. General private/internal addresses (your own intranet,
   a local dev server) are still assessable, since testing your own internal site before it goes live
-  is a legitimate use of this tool.
+  is a legitimate use of this tool. Redirects are followed manually with the same check re-applied
+  at every hop, so a target can't bounce the request to a blocked address after the fact.
+- **Known residual limitation:** the metadata/link-local check resolves DNS once before fetching;
+  it does not pin the connection to that exact IP. A host under an attacker's DNS control could in
+  principle answer differently between the check and the actual request ("DNS rebinding"). This is
+  a narrow, timing-dependent attack against a tool that already requires you to deliberately type in
+  the target domain — full protection would mean connecting to a pre-resolved IP while still
+  presenting the correct TLS SNI/Host, which this version does not implement. Treat this tool as
+  appropriate for assessing domains you choose, not as a hardened SSRF-proof network proxy.
 - The local web UI is unauthenticated by design (no login, for zero-friction local use), so it
   binds to `127.0.0.1` only, rejects any request whose `Host` header isn't exactly
   `127.0.0.1:<port>`/`localhost:<port>` (defeats DNS-rebinding), and requires a random per-run
