@@ -188,8 +188,18 @@ def _doc_headers(events: list) -> dict:
 
 
 def scan(url: str, settle: float = 4.0, consent: bool = True, gpc: bool = False,
-         timeout: int = 45) -> dict:
-    """Load `url` in headless Chromium and measure privacy behaviour."""
+         timeout: int = 45, pinned_host: str = "", pinned_ip: str = "") -> dict:
+    """Load `url` in headless Chromium and measure privacy behaviour.
+
+    `pinned_host`/`pinned_ip`: if given, Chromium's own DNS resolution for
+    `pinned_host` is forced (via --host-resolver-rules) to resolve to EXACTLY
+    `pinned_ip` — the same address the caller already validated as safe —
+    rather than letting Chromium re-resolve the hostname itself. Without
+    this, there is a window between the caller's validation and Chromium's
+    own connection in which a hostname under attacker DNS control could
+    answer differently ("DNS rebinding"), bypassing the validation entirely.
+    This only pins the top-level navigation target; subresource requests to
+    OTHER hostnames are not individually intercepted (see README)."""
     if not available():
         return {"ok": False, "error": "headless chromium/websocket unavailable"}
     binp = _chromium_bin()
@@ -200,6 +210,8 @@ def scan(url: str, settle: float = 4.0, consent: bool = True, gpc: bool = False,
             "--disable-background-networking", "--no-first-run", "--no-default-browser-check",
             "--disable-features=Translate,BackForwardCache",
             f"--remote-debugging-port={port}", f"--user-data-dir={tmp}", "about:blank"]
+    if pinned_host and pinned_ip:
+        args.append(f"--host-resolver-rules=MAP {pinned_host} {pinned_ip}")
     # Chrome refuses to start as root without --no-sandbox, which disables its
     # process sandbox — only add it when actually required (root/containers),
     # never by default, since the browser visits untrusted third-party pages.

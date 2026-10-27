@@ -102,29 +102,45 @@ _NAT64_PREFIX = ipaddress.ip_network("64:ff9b::/96")
 _VALID_HOSTNAME = re.compile(r"^[A-Za-z0-9]([A-Za-z0-9-]{0,62}\.)*[A-Za-z0-9]([A-Za-z0-9-]{0,62})?$")
 
 
+def _embedded_ipv4(ip):
+    """Return the IPv4 address embedded in `ip`, if any (IPv4-mapped, NAT64,
+    6to4, or Teredo), else None. There are several distinct IPv6 encodings of
+    an IPv4 address, each of which must be unwrapped and re-checked — an
+    address can otherwise disguise a blocked IPv4 target under a form that
+    doesn't match a plain IPv4 blocklist/network check."""
+    mapped = getattr(ip, "ipv4_mapped", None)
+    if mapped:
+        return mapped
+    if ip in _NAT64_PREFIX:
+        return ipaddress.IPv4Address(int(ip) & 0xFFFFFFFF)
+    sixtofour = getattr(ip, "sixtofour", None)
+    if sixtofour:
+        return sixtofour
+    teredo = getattr(ip, "teredo", None)  # (server_ip, client_ip) or None
+    if teredo:
+        return teredo[0]
+    return None
+
+
 def _is_blocked_ip(ip) -> bool:
-    """True if `ip` IS or EMBEDS (via IPv4-mapped or NAT64 IPv6) a blocked
-    cloud-metadata/link-local address. An address like
-    '::ffff:169.254.169.254' (IPv4-mapped) or '64:ff9b::169.254.169.254'
-    (NAT64) represents the same metadata IP under a different string that
-    would not otherwise match the plain IPv4 blocklist/network checks."""
-    candidates = [ip]
+    """True if `ip` (or an IPv4 address it embeds, under any of the several
+    IPv6 encodings of one) is a cloud-metadata address, or isn't a globally-
+    routable address at all. Using `is_global` as the primary gate — rather
+    than enumerating every private/link-local/reserved/multicast range by
+    hand — means a new or obscure non-global range doesn't silently slip
+    through; only addresses affirmatively known to be internet-routable are
+    allowed."""
+    if str(ip) in _BLOCKED_SSRF_IPS:
+        return True
+    if any(ip in net for net in _BLOCKED_SSRF_NETS if net.version == ip.version):
+        return True
+    if not ip.is_global:
+        return True
     if ip.version == 6:
-        mapped = getattr(ip, "ipv4_mapped", None)
-        if mapped:
-            candidates.append(mapped)
-        if ip in _NAT64_PREFIX:
-            candidates.append(ipaddress.IPv4Address(int(ip) & 0xFFFFFFFF))
-    for cand in candidates:
-        if str(cand) in _BLOCKED_SSRF_IPS:
+        embedded = _embedded_ipv4(ip)
+        if embedded is not None and _is_blocked_ip(embedded):
             return True
-        if cand.version == 4 and any(cand in net for net in _BLOCKED_SSRF_NETS
-                                     if net.version == 4):
-            return True
-        if cand.version == 6 and any(cand in net for net in _BLOCKED_SSRF_NETS
-                                     if net.version == 6):
-            return True
-    return (ip.is_link_local or ip.is_reserved)
+    return False
 
 
 def _is_safe_target(host: str) -> bool:
@@ -156,6 +172,27 @@ def _is_safe_target(host: str) -> bool:
         if _is_blocked_ip(ip):
             return False
     return True
+
+
+def _resolve_pinned_ip(host: str) -> str:
+    """Return the first safe IP `host` resolves to (for pinning Chromium's
+    own DNS resolution to it — see headless.scan's pinned_host/pinned_ip),
+    or '' if none. Caller must already have confirmed `_is_safe_target(host)`
+    so this never returns a blocked address; it exists to find a SPECIFIC
+    validated address to pin to, not to re-validate."""
+    try:
+        infos = socket.getaddrinfo(host, None)
+    except Exception:
+        return ""
+    for info in infos:
+        raw_ip = info[4][0].split("%")[0]
+        try:
+            ip = ipaddress.ip_address(raw_ip)
+        except ValueError:
+            continue
+        if ip.version == 4 and not _is_blocked_ip(ip):
+            return str(ip)
+    return ""
 
 
 _MAX_REDIRECTS = 5
@@ -362,7 +399,9 @@ class PrivacyPostureAssessor:
             self._progress(f"Launching local headless Chromium and loading {host}…")
             try:
                 from . import headless as H
-                hs = H.scan("https://" + host, settle=float(self.cfg.get("settle", 4.0)), consent=True)
+                pinned_ip = _resolve_pinned_ip(host)
+                hs = H.scan("https://" + host, settle=float(self.cfg.get("settle", 4.0)), consent=True,
+                           pinned_host=host, pinned_ip=pinned_ip)
                 final_host = urlparse(hs.get("final_url") or "").hostname or ""
                 if hs.get("ok") and final_host and not _is_safe_target(final_host):
                     # Chromium follows its own navigation/redirects, which our

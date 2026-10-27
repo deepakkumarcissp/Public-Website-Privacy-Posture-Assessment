@@ -121,19 +121,18 @@ for finding in result["findings"]:
   a local dev server) are still assessable, since testing your own internal site before it goes live
   is a legitimate use of this tool. Redirects are followed manually with the same check re-applied
   at every hop, so a target can't bounce the request to a blocked address after the fact.
-- **Known residual limitations:**
-  1. The metadata/link-local check resolves DNS once before fetching; it does not pin the
-     connection to that exact IP. A host under an attacker's DNS control could in principle answer
-     differently between the check and the actual request ("DNS rebinding"). This is a narrow,
-     timing-dependent attack against a tool that already requires you to deliberately type in the
-     target domain — full protection would mean connecting to a pre-resolved IP while still
-     presenting the correct TLS SNI/Host, which this version does not implement.
-  2. The dynamic (headless-Chromium) scan's *top-level navigation* is re-validated after the page
-     loads — if it ends up redirected to a blocked address, the dynamic result is discarded and the
-     static path (which validates every redirect hop) is used instead. *Sub-resources* the page
-     loads (scripts, images, XHR/fetch calls made by the page's own JavaScript) are NOT individually
-     re-validated against the blocklist, since that would require full CDP request interception.
-     This only matters if the site you deliberately chose to assess is itself malicious.
+- **DNS-rebinding (TOCTOU) protection:** the dynamic scan resolves the target hostname once in
+  Python, validates that IP, then forces Chromium to resolve that *same* hostname to that *exact*
+  IP (`--host-resolver-rules`) rather than letting Chromium re-resolve it independently — closing
+  the window where an attacker-controlled DNS server could answer safely for the check and then
+  differently for the real connection. The static (non-Chromium) path re-validates on every
+  redirect hop instead, which is a tighter window but not fully eliminated without a custom
+  IP-pinning transport adapter (not implemented in this version).
+- **Known residual limitation:** only the top-level navigation target is pinned/re-validated this
+  way. *Sub-resources* the page loads (scripts, images, XHR/fetch calls made by the page's own
+  JavaScript, possibly to other hostnames) are not individually intercepted and re-validated, since
+  that would require full CDP request interception (`Fetch.enable` on every resource). This only
+  matters if the site you deliberately chose to assess is itself malicious.
 
   Treat this tool as appropriate for assessing domains you choose, not as a hardened SSRF-proof
   network proxy for scanning untrusted targets.
