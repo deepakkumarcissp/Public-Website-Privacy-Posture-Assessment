@@ -166,15 +166,56 @@ def test_csv_export_with_findings():
     from privacy_posture.export import findings_to_csv
     result = {
         "domain": "example.com", "risk": "High", "score": 72, "scan_mode": "static",
+        "site": {"https": True, "hsts": False, "banner": False, "cmp": ""},
+        "kpi": {"trackers": 1, "preconsent": 0, "forms": 0, "criticals": 0},
+        "laws": ["GDPR", "CCPA/CPRA"], "law_scores": {"GDPR": 80, "CCPA/CPRA": 90},
+        "third_parties": [{"name": "Google Analytics", "category": "Analytics",
+                           "trap_trace": True, "wiretap": False}],
         "findings": [{"sev": "high", "title": "No privacy policy found/linked",
                      "detail": "detail text", "evidence": "ev text",
                      "laws": ["GDPR", "CCPA/CPRA"], "fix": "1. Do X"}],
     }
     csv_text = findings_to_csv(result)
-    assert "Domain,Risk,Score,Scan Mode,Severity,Finding,Detail,Evidence,Laws,Remediation Steps" in csv_text
-    assert "example.com" in csv_text
+    assert "DKCISSP Privacy Posture Assessment" in csv_text
+    assert "Domain,example.com" in csv_text
+    assert "Compliance by Law" in csv_text
+    assert "GDPR,80" in csv_text
+    assert "Severity,Finding,Detail,Evidence,Laws,Remediation Steps" in csv_text
     assert "No privacy policy found/linked" in csv_text
     assert "GDPR; CCPA/CPRA" in csv_text
+    assert "Third Parties" in csv_text
+    assert "Google Analytics" in csv_text
+    # exactly one data row for the one finding -- no truncation, no extra rows
+    assert csv_text.count("No privacy policy found/linked") == 1
+
+
+def test_csv_export_flattens_multiline_fields_to_one_row():
+    """A finding's evidence can contain embedded newlines (e.g. a list of
+    beacon URLs). Each finding must still render as exactly one CSV row, not
+    be split across several, or it looks like data went missing when the
+    file is skimmed."""
+    from privacy_posture.export import findings_to_csv
+    result = {
+        "domain": "example.com", "risk": "Critical", "score": 10, "scan_mode": "dynamic",
+        "site": {"https": True, "hsts": True, "banner": True, "cmp": "OneTrust"},
+        "kpi": {"trackers": 2, "preconsent": 1, "forms": 0, "criticals": 1},
+        "laws": ["GDPR"], "law_scores": {"GDPR": 40},
+        "third_parties": [],
+        "findings": [
+            {"sev": "critical", "title": "Finding A",
+             "detail": "line1\nline2", "evidence": "beacon1\nbeacon2\nbeacon3",
+             "laws": ["GDPR"], "fix": "1. step one\n2. step two"},
+            {"sev": "high", "title": "Finding B", "detail": "d", "evidence": "e",
+             "laws": ["GDPR"], "fix": ""},
+        ],
+    }
+    csv_text = findings_to_csv(result)
+    import csv as _csv, io as _io
+    rows = list(_csv.reader(_io.StringIO(csv_text)))
+    finding_rows = [r for r in rows if r and r[0] in ("critical", "high")]
+    assert len(finding_rows) == 2
+    assert "\n" not in finding_rows[0][3]  # evidence column flattened
+    assert "beacon1 | beacon2 | beacon3" == finding_rows[0][3]
 
 
 def test_csv_export_with_no_findings():
