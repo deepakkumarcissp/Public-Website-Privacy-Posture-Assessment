@@ -1,0 +1,8 @@
+requests>=2.28
+
+# Optional — only needed for the local web UI:
+# flask>=2.3
+
+# Optional — only needed for the dynamic headless-Chromium scan
+# (also requires a local Chrome/Chromium install):
+# websocket-client>=1.5
