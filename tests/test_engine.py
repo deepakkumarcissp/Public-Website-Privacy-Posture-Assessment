@@ -102,6 +102,37 @@ def test_ssrf_allows_ordinary_public_ip():
     assert _is_blocked_ip(ip) is False
 
 
+def test_ssrf_blocks_6to4_embedded_metadata_ip():
+    # 2002:a9fe:a9fe:: is the 6to4 encoding of 169.254.169.254
+    ip = ipaddress.ip_address("2002:a9fe:a9fe::")
+    assert _is_blocked_ip(ip) is True
+
+
+def test_ssrf_blocks_carrier_grade_nat_range():
+    # 100.100.100.200 (Alibaba Cloud metadata) sits in the RFC 6598 shared
+    # address space (100.64.0.0/10), which is_global correctly excludes.
+    assert _is_blocked_ip(ipaddress.ip_address("100.100.100.200")) is True
+
+
+def test_ssrf_blocks_loopback_and_reserved_generically():
+    # The is_global-allowlist model should catch categories we never
+    # enumerated by hand, not just the ones explicitly listed.
+    assert _is_blocked_ip(ipaddress.ip_address("127.0.0.1")) is True
+    assert _is_blocked_ip(ipaddress.ip_address("10.0.0.5")) is True
+    assert _is_blocked_ip(ipaddress.ip_address("::1")) is True
+
+
+def test_resolve_pinned_ip_returns_ipv4_for_safe_host():
+    from privacy_posture.engine import _resolve_pinned_ip
+    import socket as _socket
+    try:
+        _socket.getaddrinfo("example.com", None)
+    except Exception:
+        pytest.skip("no network access in this environment")
+    pinned = _resolve_pinned_ip("example.com")
+    assert pinned == "" or ipaddress.ip_address(pinned).version == 4
+
+
 def test_ssrf_allows_plain_hostname_shape():
     # Shape-only check (no network call needed to prove the regex accepts a
     # normal domain) -- actual resolution is exercised by the network test.
