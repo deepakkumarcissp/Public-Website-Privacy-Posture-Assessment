@@ -77,6 +77,27 @@ def _check_token():
         abort(403)
 
 
+@app.after_request
+def _security_headers(response):
+    # Set as a real HTTP header, not a <meta> tag -- frame-ancestors (and a
+    # few other directives) are silently ignored by browsers when a CSP is
+    # delivered via <meta>, so a header is the only way to actually enforce
+    # them. default-src/font-src/connect-src/img-src pinned to 'self' so a
+    # future edit can't reintroduce a third-party resource load (e.g. Google
+    # Fonts) without the browser itself refusing it. style-src/script-src
+    # allow 'unsafe-inline' because this is a single self-contained template
+    # with inline <style>/<script> by design (no bundler, no build step, no
+    # external JS).
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; style-src 'self' 'unsafe-inline'; "
+        "script-src 'self' 'unsafe-inline'; font-src 'self'; "
+        "img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'"
+    )
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    return response
+
+
 @app.route("/")
 def index():
     return render_template("index.html", session_token=_SESSION_TOKEN)
