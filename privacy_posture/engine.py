@@ -98,7 +98,33 @@ def _sev_rank(s):
 # company's own internal/private web apps.
 _BLOCKED_SSRF_IPS = {"169.254.169.254", "100.100.100.200", "fd00:ec2::254"}
 _BLOCKED_SSRF_NETS = [ipaddress.ip_network("169.254.0.0/16"), ipaddress.ip_network("fe80::/10")]
+_NAT64_PREFIX = ipaddress.ip_network("64:ff9b::/96")
 _VALID_HOSTNAME = re.compile(r"^[A-Za-z0-9]([A-Za-z0-9-]{0,62}\.)*[A-Za-z0-9]([A-Za-z0-9-]{0,62})?$")
+
+
+def _is_blocked_ip(ip) -> bool:
+    """True if `ip` IS or EMBEDS (via IPv4-mapped or NAT64 IPv6) a blocked
+    cloud-metadata/link-local address. An address like
+    '::ffff:169.254.169.254' (IPv4-mapped) or '64:ff9b::169.254.169.254'
+    (NAT64) represents the same metadata IP under a different string that
+    would not otherwise match the plain IPv4 blocklist/network checks."""
+    candidates = [ip]
+    if ip.version == 6:
+        mapped = getattr(ip, "ipv4_mapped", None)
+        if mapped:
+            candidates.append(mapped)
+        if ip in _NAT64_PREFIX:
+            candidates.append(ipaddress.IPv4Address(int(ip) & 0xFFFFFFFF))
+    for cand in candidates:
+        if str(cand) in _BLOCKED_SSRF_IPS:
+            return True
+        if cand.version == 4 and any(cand in net for net in _BLOCKED_SSRF_NETS
+                                     if net.version == 4):
+            return True
+        if cand.version == 6 and any(cand in net for net in _BLOCKED_SSRF_NETS
+                                     if net.version == 6):
+            return True
+    return (ip.is_link_local or ip.is_reserved)
 
 
 def _is_safe_target(host: str) -> bool:
@@ -106,7 +132,8 @@ def _is_safe_target(host: str) -> bool:
     port, or other characters a URL parser could interpret differently than
     this check does — e.g. 'evil.com@169.254.169.254', which requests/urllib3
     would treat as a request to 169.254.169.254 with 'evil.com@' as userinfo)
-    AND it resolves to an address that is not cloud-metadata/link-local.
+    AND it resolves to an address that is not cloud-metadata/link-local
+    (including via an IPv4-mapped or NAT64 IPv6 disguise).
 
     Fails CLOSED: a hostname that doesn't match the allowed character set, or
     that fails to resolve at all, is treated as unsafe rather than allowed
@@ -126,7 +153,7 @@ def _is_safe_target(host: str) -> bool:
             ip = ipaddress.ip_address(raw_ip)
         except ValueError:
             return False
-        if str(ip) in _BLOCKED_SSRF_IPS or any(ip in net for net in _BLOCKED_SSRF_NETS):
+        if _is_blocked_ip(ip):
             return False
     return True
 
@@ -336,7 +363,17 @@ class PrivacyPostureAssessor:
             try:
                 from . import headless as H
                 hs = H.scan("https://" + host, settle=float(self.cfg.get("settle", 4.0)), consent=True)
-                if hs.get("ok"):
+                final_host = urlparse(hs.get("final_url") or "").hostname or ""
+                if hs.get("ok") and final_host and not _is_safe_target(final_host):
+                    # Chromium follows its own navigation/redirects, which our
+                    # Python-level _safe_get() hop-by-hop validation never
+                    # sees. If the page ended up navigated to a blocked
+                    # target, discard the dynamic result entirely rather than
+                    # trust anything it captured, and fall back to the static
+                    # path (which independently validates the ORIGINAL host).
+                    self._progress(f"Headless navigation ended up at a disallowed address "
+                                   f"({final_host}) — discarding the dynamic scan.")
+                elif hs.get("ok"):
                     site["scan_mode"] = "dynamic"
                     site["reachable"] = True
                     html = hs.get("html") or ""
