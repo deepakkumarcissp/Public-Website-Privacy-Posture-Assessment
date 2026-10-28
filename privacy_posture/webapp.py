@@ -32,6 +32,15 @@ _XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 app = Flask(__name__)
 _log = logging.getLogger("dkcissp.privacy_posture")
 
+# Hard ceiling on any request body (CWE-400). Flask/Werkzeug otherwise buffer
+# the whole body into memory before parsing JSON, so an unbounded POST — most
+# concretely to /api/report, which accepts a full scan-result JSON blob back
+# from the browser — could tie up this single-threaded dev server for a long
+# time processing a body far bigger than any real scan result would ever be.
+# 20MB comfortably covers a dynamic scan's worth of findings/evidence/third
+# parties with room to spare.
+app.config["MAX_CONTENT_LENGTH"] = 20 * 1024 * 1024
+
 # Per-process secret, known only to pages this server itself rendered (never
 # a cookie): every scan-triggering request must present it in a header. A
 # cookie would be sent by the browser AMBIENTLY — automatically, on any
@@ -81,6 +90,17 @@ def _check_token():
         abort(403)
 
 
+def _json_body() -> dict:
+    """request.get_json(silent=True) returns whatever JSON value the caller
+    posted -- a list, a bare string, a number -- not necessarily a dict. Every
+    handler immediately calls .get() on the result, which raises an unhandled
+    AttributeError for any non-dict body. Centralizing the type check here
+    means a malformed request gets the same clean {} (and therefore the same
+    handled "missing field" response) everywhere, instead of a generic 500."""
+    data = request.get_json(silent=True)
+    return data if isinstance(data, dict) else {}
+
+
 @app.after_request
 def _security_headers(response):
     # Set as a real HTTP header, not a <meta> tag -- frame-ancestors (and a
@@ -122,7 +142,7 @@ def _run_analysis(domain: str, no_headless: bool, on_progress=None) -> dict:
 @app.route("/api/assess", methods=["POST"])
 def api_assess():
     _check_token()
-    data = request.get_json(silent=True) or {}
+    data = _json_body()
     domain = (data.get("domain") or "").strip()
     if not domain:
         return jsonify({"error": "Enter a domain or URL to assess."}), 400
@@ -152,7 +172,7 @@ def api_assess_stream():
     lines while the scan runs, ending with one 'result' event carrying the
     full JSON result."""
     _check_token()
-    data = request.get_json(silent=True) or {}
+    data = _json_body()
     domain = (data.get("domain") or "").strip()
     no_headless = bool(data.get("no_headless"))
     if not domain:
@@ -195,15 +215,35 @@ def api_assess_stream():
                     headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
+#  Real scans never come close to these (clauses.py's richest finding type has
+# 6 remediation steps, and a typical scan surfaces a handful of findings and
+# third parties). They exist only to bound the worst case of a crafted
+# request — e.g. the MAX_CONTENT_LENGTH-sized body still fits tens of
+# thousands of tiny findings — so building the report can't be turned into a
+# multi-minute, single-threaded-server-blocking operation (CWE-400).
+_MAX_REPORT_FINDINGS = 500
+_MAX_REPORT_STEPS_PER_FINDING = 50
+_MAX_REPORT_THIRD_PARTIES = 500
+
+
 @app.route("/api/report", methods=["POST"])
 def api_report():
     """Builds the .xlsx report from a result the browser already has (this
     server keeps no scan history), so the client posts back the same JSON
     /api/assess or /api/assess-stream just gave it."""
     _check_token()
-    result = request.get_json(silent=True) or {}
+    result = _json_body()
     if result.get("error") or not result.get("domain"):
         return jsonify({"error": "No assessment result to build a report from."}), 400
+    findings = result.get("findings") or []
+    third_parties = result.get("third_parties") or []
+    if not isinstance(findings, list) or not isinstance(third_parties, list):
+        return jsonify({"error": "Malformed assessment result."}), 400
+    if len(findings) > _MAX_REPORT_FINDINGS or len(third_parties) > _MAX_REPORT_THIRD_PARTIES:
+        return jsonify({"error": "Assessment result is too large to build a report from."}), 400
+    for f in findings:
+        if isinstance(f, dict) and len(f.get("steps") or []) > _MAX_REPORT_STEPS_PER_FINDING:
+            return jsonify({"error": "Assessment result is too large to build a report from."}), 400
     try:
         xlsx_bytes = findings_to_xlsx(result)
     except Exception:

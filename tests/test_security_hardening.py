@@ -229,3 +229,60 @@ def test_assess_error_does_not_leak_exception_text(client, monkeypatch):
     resp = _post(client, "/api/assess", {"domain": "example.com"}, token=webapp._SESSION_TOKEN)
     assert b"/etc/shadow" not in resp.data
     assert b"internal error" in resp.data.lower()
+
+
+# ── /api/report hardening: malformed bodies, size/count caps (CWE-400) ──────
+
+@pytest.mark.parametrize("malformed_body", [[1, 2, 3], "just a string", 42, None])
+def test_report_rejects_non_dict_json_body_cleanly(client, malformed_body):
+    from privacy_posture import webapp
+    resp = _post(client, "/api/report", malformed_body, token=webapp._SESSION_TOKEN)
+    # Must be a clean, handled 400 -- never an unhandled 500 from calling
+    # .get() on a list/string/None.
+    assert resp.status_code == 400
+    assert "error" in resp.get_json()
+
+
+def test_report_rejects_too_many_findings(client):
+    from privacy_posture import webapp
+    result = {
+        "domain": "example.com", "risk": "Low", "score": 100, "scan_mode": "static",
+        "findings": [{"sev": "low", "title": "t", "steps": ["s"]}] * (webapp._MAX_REPORT_FINDINGS + 1),
+    }
+    resp = _post(client, "/api/report", result, token=webapp._SESSION_TOKEN)
+    assert resp.status_code == 400
+    assert "too large" in resp.get_json()["error"].lower()
+
+
+def test_report_rejects_too_many_steps_in_one_finding(client):
+    from privacy_posture import webapp
+    result = {
+        "domain": "example.com", "risk": "Low", "score": 100, "scan_mode": "static",
+        "findings": [{"sev": "low", "title": "t",
+                     "steps": ["s"] * (webapp._MAX_REPORT_STEPS_PER_FINDING + 1)}],
+    }
+    resp = _post(client, "/api/report", result, token=webapp._SESSION_TOKEN)
+    assert resp.status_code == 400
+    assert "too large" in resp.get_json()["error"].lower()
+
+
+def test_report_accepts_well_formed_result(client):
+    from privacy_posture import webapp
+    result = {
+        "domain": "example.com", "risk": "Low", "score": 100, "scan_mode": "static",
+        "site": {}, "kpi": {}, "laws": [], "law_scores": {}, "third_parties": [],
+        "findings": [{"sev": "low", "title": "t", "steps": ["s"]}],
+    }
+    resp = _post(client, "/api/report", result, token=webapp._SESSION_TOKEN)
+    assert resp.status_code == 200
+    assert resp.headers["Content-Type"] == webapp._XLSX_MIME
+    assert "example.com" in resp.headers["Content-Disposition"]
+
+
+def test_max_content_length_is_set():
+    from privacy_posture import webapp
+    # Catches a regression back to the unbounded-body state this guards
+    # against, without needing to actually push a multi-MB request through
+    # the test client.
+    assert webapp.app.config["MAX_CONTENT_LENGTH"]
+    assert webapp.app.config["MAX_CONTENT_LENGTH"] <= 50 * 1024 * 1024
