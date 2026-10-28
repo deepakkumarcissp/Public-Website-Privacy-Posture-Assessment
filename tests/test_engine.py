@@ -162,68 +162,95 @@ def test_analyze_example_com():
     assert "site" in result
 
 
-def test_csv_export_with_findings():
-    from privacy_posture.export import findings_to_csv
+def _load_report(xlsx_bytes):
+    import io
+    import openpyxl
+    return openpyxl.load_workbook(io.BytesIO(xlsx_bytes))
+
+
+def _rows(ws, min_row, max_col):
+    return [[ws.cell(row=r, column=c).value for c in range(1, max_col + 1)]
+            for r in range(min_row, ws.max_row + 1)]
+
+
+def test_xlsx_report_with_findings():
+    from privacy_posture.export import findings_to_xlsx
     result = {
         "domain": "example.com", "risk": "High", "score": 72, "scan_mode": "static",
         "site": {"https": True, "hsts": False, "banner": False, "cmp": ""},
         "kpi": {"trackers": 1, "preconsent": 0, "forms": 0, "criticals": 0},
         "laws": ["GDPR", "CCPA/CPRA"], "law_scores": {"GDPR": 80, "CCPA/CPRA": 90},
+        "sev_counts": {"Critical": 0, "High": 1, "Medium": 0, "Low": 0},
         "third_parties": [{"name": "Google Analytics", "category": "Analytics",
                            "trap_trace": True, "wiretap": False}],
         "findings": [{"sev": "high", "title": "No privacy policy found/linked",
                      "detail": "detail text", "evidence": "ev text",
-                     "laws": ["GDPR", "CCPA/CPRA"], "fix": "1. Do X"}],
+                     "laws": ["GDPR", "CCPA/CPRA"], "steps": ["Do X"]}],
     }
-    csv_text = findings_to_csv(result)
-    assert "DKCISSP Privacy Posture Assessment" in csv_text
-    assert "Domain,example.com" in csv_text
-    assert "Compliance by Law" in csv_text
-    assert "GDPR,80" in csv_text
-    assert "Severity,Finding,Detail,Evidence,Laws,Remediation Steps" in csv_text
-    assert "No privacy policy found/linked" in csv_text
-    assert "GDPR; CCPA/CPRA" in csv_text
-    assert "Third Parties" in csv_text
-    assert "Google Analytics" in csv_text
-    # exactly one data row for the one finding -- no truncation, no extra rows
-    assert csv_text.count("No privacy policy found/linked") == 1
+    wb = _load_report(findings_to_xlsx(result))
+    assert wb.sheetnames == ["Dashboard", "Remediation Tracker", "Third Parties"]
+
+    dash = wb["Dashboard"]
+    assert "DKCISSP Privacy Posture Assessment" in dash["B2"].value
+    assert "example.com" in dash["B4"].value
+    assert any(row[1] == "GDPR" and row[2] == 80 for row in _rows(dash, 12, 3))
+
+    rt = wb["Remediation Tracker"]
+    rt_rows = _rows(rt, 4, 12)
+    task_rows = [r for r in rt_rows if r[2] == "No privacy policy found/linked"]
+    # exactly one task row for the one finding's one remediation step -- no
+    # truncation, no extra rows
+    assert len(task_rows) == 1
+    assert task_rows[0][1] == "High"
+    assert task_rows[0][3] == "Do X"
+    assert task_rows[0][4] == "GDPR; CCPA/CPRA"
+    assert task_rows[0][6] == "Not Started"
+
+    tp = wb["Third Parties"]
+    assert any(row[0] == "Google Analytics" for row in _rows(tp, 3, 5))
 
 
-def test_csv_export_flattens_multiline_fields_to_one_row():
-    """A finding's evidence can contain embedded newlines (e.g. a list of
-    beacon URLs). Each finding must still render as exactly one CSV row, not
-    be split across several, or it looks like data went missing when the
-    file is skimmed."""
-    from privacy_posture.export import findings_to_csv
+def test_xlsx_report_splits_multiple_steps_into_one_row_each():
+    """A finding with several remediation steps must become one Remediation
+    Tracker row per step, not one row with everything crammed together, so
+    each step can be tracked (Owner/Status/Due Date) independently."""
+    from privacy_posture.export import findings_to_xlsx
     result = {
         "domain": "example.com", "risk": "Critical", "score": 10, "scan_mode": "dynamic",
         "site": {"https": True, "hsts": True, "banner": True, "cmp": "OneTrust"},
         "kpi": {"trackers": 2, "preconsent": 1, "forms": 0, "criticals": 1},
         "laws": ["GDPR"], "law_scores": {"GDPR": 40},
+        "sev_counts": {"Critical": 1, "High": 1, "Medium": 0, "Low": 0},
         "third_parties": [],
         "findings": [
             {"sev": "critical", "title": "Finding A",
              "detail": "line1\nline2", "evidence": "beacon1\nbeacon2\nbeacon3",
-             "laws": ["GDPR"], "fix": "1. step one\n2. step two"},
+             "laws": ["GDPR"], "steps": ["step one", "step two"]},
             {"sev": "high", "title": "Finding B", "detail": "d", "evidence": "e",
-             "laws": ["GDPR"], "fix": ""},
+             "laws": ["GDPR"], "steps": ["only step"]},
         ],
     }
-    csv_text = findings_to_csv(result)
-    import csv as _csv, io as _io
-    rows = list(_csv.reader(_io.StringIO(csv_text)))
-    finding_rows = [r for r in rows if r and r[0] in ("critical", "high")]
-    assert len(finding_rows) == 2
-    assert "\n" not in finding_rows[0][3]  # evidence column flattened
-    assert "beacon1 | beacon2 | beacon3" == finding_rows[0][3]
+    wb = _load_report(findings_to_xlsx(result))
+    rt = wb["Remediation Tracker"]
+    rows = _rows(rt, 4, 12)
+    finding_a_rows = [r for r in rows if r[2] == "Finding A"]
+    finding_b_rows = [r for r in rows if r[2] == "Finding B"]
+    assert len(finding_a_rows) == 2
+    assert len(finding_b_rows) == 1
+    assert {r[3] for r in finding_a_rows} == {"step one", "step two"}
+    # High-severity default priority, Critical gets the top default priority
+    assert all(r[7] == "P1" for r in finding_a_rows)
+    assert finding_b_rows[0][7] == "P2"
 
 
-def test_csv_export_with_no_findings():
-    from privacy_posture.export import findings_to_csv
+def test_xlsx_report_with_no_findings():
+    from privacy_posture.export import findings_to_xlsx
     result = {"domain": "example.com", "risk": "Low", "score": 100,
              "scan_mode": "static", "findings": []}
-    csv_text = findings_to_csv(result)
-    assert "No privacy issues detected" in csv_text
+    wb = _load_report(findings_to_xlsx(result))
+    rt = wb["Remediation Tracker"]
+    rows = _rows(rt, 4, 12)
+    assert any(r[2] == "No privacy issues detected" for r in rows)
 
 
 def test_cli_entrypoint_exists():

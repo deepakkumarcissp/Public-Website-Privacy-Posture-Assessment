@@ -1,4 +1,4 @@
-"""Regression tests for the deep security review: CSV/formula injection
+"""Regression tests for the deep security review: xlsx/formula injection
 defense, response-size/decompression-bomb capping, and the webapp's
 header-based auth, Host check, concurrency limit, and overall deadline."""
 import gzip
@@ -10,10 +10,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import pytest
 
-from privacy_posture.export import findings_to_csv, _defuse
+from privacy_posture.export import findings_to_xlsx, _defuse
 
 
-# ── CSV / formula injection (CWE-1236) ──────────────────────────────────────
+# ── xlsx / formula injection (CWE-1236) ─────────────────────────────────────
 
 @pytest.mark.parametrize("trigger", ["=", "+", "-", "@", "\t", "\r"])
 def test_defuse_prefixes_formula_trigger_characters(trigger):
@@ -28,16 +28,22 @@ def test_defuse_leaves_normal_text_untouched():
     assert _defuse(42) == "42"
 
 
-def test_findings_to_csv_defuses_malicious_field():
+def test_findings_to_xlsx_defuses_malicious_field():
+    import openpyxl
+    import io
     result = {
         "domain": "example.com", "risk": "High", "score": 50, "scan_mode": "static",
         "findings": [{"sev": "high", "title": "=HYPERLINK(\"http://evil\",\"x\")",
-                     "detail": "detail", "evidence": "", "laws": ["GDPR"], "fix": ""}],
+                     "detail": "detail", "evidence": "", "laws": ["GDPR"], "steps": ["do it"]}],
     }
-    csv_text = findings_to_csv(result)
-    # The cell must be prefixed, so the formula-trigger character is never
-    # the first character a spreadsheet application sees in that cell.
-    assert "'=HYPERLINK" in csv_text
+    xlsx_bytes = findings_to_xlsx(result)
+    wb = openpyxl.load_workbook(io.BytesIO(xlsx_bytes))
+    rt = wb["Remediation Tracker"]
+    titles = [rt.cell(row=r, column=3).value for r in range(4, rt.max_row + 1)]
+    # The cell must be prefixed (and stored as a plain string, never a
+    # formula), so the formula-trigger character is never the first thing a
+    # spreadsheet application sees in that cell.
+    assert any(t and t.startswith("'=HYPERLINK") for t in titles)
 
 
 # ── Response-size cap / decompression-bomb guard ────────────────────────────
