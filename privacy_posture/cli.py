@@ -6,7 +6,7 @@ import json
 import sys
 
 from .engine import PrivacyPostureAssessor
-from .export import findings_to_csv
+from .export import findings_to_xlsx
 
 
 def _print_human(result: dict) -> None:
@@ -56,8 +56,9 @@ def main(argv=None) -> int:
                     "Only assess domains you own or are authorized to test.")
     parser.add_argument("domain", help="Domain or URL to assess (e.g. example.com)")
     parser.add_argument("--json", action="store_true", help="Print the full result as JSON.")
-    parser.add_argument("--csv", metavar="PATH",
-                        help="Also write the findings to a CSV file at PATH.")
+    parser.add_argument("--report", metavar="PATH",
+                        help="Also write a Dashboard/Remediation Tracker/Third Parties .xlsx "
+                             "report to PATH.")
     parser.add_argument("--no-headless", action="store_true",
                         help="Skip the headless-Chromium dynamic scan even if a browser is available "
                              "(static HTTP-only scan).")
@@ -74,10 +75,10 @@ def main(argv=None) -> int:
     else:
         _print_human(result)
 
-    if args.csv and not result.get("error"):
-        with open(args.csv, "w", newline="", encoding="utf-8") as fh:
-            fh.write(findings_to_csv(result))
-        print(f"Wrote findings to {args.csv}", file=sys.stderr)
+    if args.report and not result.get("error"):
+        with open(args.report, "wb") as fh:
+            fh.write(findings_to_xlsx(result))
+        print(f"Wrote report to {args.report}", file=sys.stderr)
 
     if result.get("error"):
         return 2

@@ -17,6 +17,7 @@ import json
 import logging
 import os
 import queue
+import re
 import secrets
 import threading
 import time
@@ -24,6 +25,9 @@ import time
 from flask import Flask, Response, abort, jsonify, render_template, request
 
 from .engine import PrivacyPostureAssessor
+from .export import findings_to_xlsx
+
+_XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 app = Flask(__name__)
 _log = logging.getLogger("dkcissp.privacy_posture")
@@ -189,6 +193,29 @@ def api_assess_stream():
 
     return Response(stream(), mimetype="text/event-stream",
                     headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+@app.route("/api/report", methods=["POST"])
+def api_report():
+    """Builds the .xlsx report from a result the browser already has (this
+    server keeps no scan history), so the client posts back the same JSON
+    /api/assess or /api/assess-stream just gave it."""
+    _check_token()
+    result = request.get_json(silent=True) or {}
+    if result.get("error") or not result.get("domain"):
+        return jsonify({"error": "No assessment result to build a report from."}), 400
+    try:
+        xlsx_bytes = findings_to_xlsx(result)
+    except Exception:
+        _log.exception("Report generation failed for %r", result.get("domain"))
+        return jsonify({"error": "Report generation failed due to an internal error."}), 500
+    safe_domain = re.sub(r"[^a-z0-9.-]", "_", str(result.get("domain", "report")), flags=re.I)
+    filename = f"{safe_domain}_privacy_report.xlsx"
+    return Response(
+        xlsx_bytes,
+        mimetype=_XLSX_MIME,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 def main():
