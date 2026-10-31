@@ -1,8 +1,10 @@
 # DKCISSP Privacy Posture Assessment
 
-Enter a website, get an instant privacy/cookie-consent compliance read — mapped to the specific
-article/section of **GDPR, CCPA/CPRA, CIPA, India DPDP, and PDPA (Singapore)** that's implicated,
-with concrete remediation steps. Runs entirely on your own machine.
+**Worried your website is breaking privacy laws without you knowing?** Type in your domain and get a
+clear score, the exact trackers and cookies behind it, and step-by-step fixes, checked against
+**GDPR, CCPA/CPRA, CIPA, India DPDP and PDPA (Singapore)** — each finding mapped to the specific
+article or section it implicates. It runs 100% on your own machine: no account, no cloud upload,
+and nothing about your site is sent to me or anyone else. One command to install.
 
 ## Why
 
