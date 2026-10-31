@@ -239,6 +239,11 @@ if _HAVE_REQUESTS:
     _install_connection_pinning()
 
 _MAX_REDIRECTS = 5
+
+_STATIC_NOTE = ("Static scan limitation: only the raw HTML was read. Consent banners, consent-based "
+                "tag gating and opt-out links are usually injected by JavaScript and are invisible "
+                "here, so this may be a false positive — re-run without 'Static HTTP check only' "
+                "(requires Chrome/Chromium) for a verified result.")
 _MAX_BODY_BYTES = 10 * 1024 * 1024  # 10 MB — generous for any real page
 
 
@@ -559,6 +564,12 @@ class PrivacyPostureAssessor:
         cmp = next((v for v in vendors_found if v["is_cmp"]), None)
         site["cmp"] = cmp["cmp_label"] if cmp else ""
         trackers = [v for v in vendors_found if not v["is_cmp"]]
+        # In a real browser load, "fired before consent" must mean an observed
+        # network request — not merely a name appearing in the HTML, which also
+        # matches scripts a consent manager is holding back (inert).
+        fired_names = V.detect_fired(requests_seen, cfg=self.cfg) if site["scan_mode"] == "dynamic" else None
+        for t in trackers:
+            t["fired"] = True if fired_names is None else (t["name"] in fired_names)
         site["trackers"] = trackers
         if trackers:
             self._progress(f"Found {len(trackers)} third-party tracker(s): "
@@ -588,16 +599,21 @@ class PrivacyPostureAssessor:
         site["policy"] = self._analyze_policy(purl)
 
         F = site["findings"]
-        adv = [t for t in trackers if t["category"] == "Advertising"]
-        ana = [t for t in trackers if t["category"] == "Analytics"]
-        sess = [t for t in trackers if t["category"] == "Session replay"]
-        chat = [t for t in trackers if t["category"] == "Chat / AI"]
-        traps = [t for t in trackers if t["trap_trace"]]
-        wires = [t for t in trackers if t["wiretap"]]
         dyn = site["scan_mode"] == "dynamic"
+        live = [t for t in trackers if t.get("fired", True)]   # observed firing (dynamic) / present (static)
+        inert = [t for t in trackers if not t.get("fired", True)]  # in HTML only, never requested
+        adv = [t for t in live if t["category"] == "Advertising"]
+        ana = [t for t in live if t["category"] == "Analytics"]
+        sess = [t for t in live if t["category"] == "Session replay"]
+        chat = [t for t in live if t["category"] == "Chat / AI"]
+        traps = [t for t in live if t["trap_trace"]]
+        wires = [t for t in live if t["wiretap"]]
         from urllib.parse import urlparse as _up
         base_reg = _reg_domain(host)
-        beacons = [u for u in requests_seen if _reg_domain((_up(u).hostname or "")) != base_reg]
+        # Evidence beacons: only requests that belong to a known tracker vendor
+        # (not the site's own CDN, the consent manager, or performance monitoring).
+        beacons = [u for u in requests_seen
+                   if _reg_domain((_up(u).hostname or "")) != base_reg and V.detect_fired([u], cfg=self.cfg)]
 
         def add(ftype, sev, title, evidence, extra=""):
             m = _enrich(ftype)
@@ -619,29 +635,43 @@ class PrivacyPostureAssessor:
                     ev, extra=(f"A CMP ({site['cmp']}) is present but is NOT blocking them." if site["cmp"]
                                else "No consent manager blocks them."))
             elif not site["cmp"]:
-                add("pre_consent_tracking", "critical",
-                    f"{len(pre)} non-essential tracker(s) load before any consent", ev)
+                add("pre_consent_tracking", "high",
+                    f"{len(pre)} non-essential tracker(s) referenced in the page source — consent gating not verified",
+                    ev, extra=_STATIC_NOTE)
             else:
                 add("pre_consent_tracking", "high",
                     f"{len(pre)} non-essential tracker(s) present with a CMP ({site['cmp']}) — confirm they are blocked pre-consent",
                     ev, extra="Static scan cannot confirm the gate; verify with a consent-flow test.")
+        if inert:
+            add("pre_consent_tracking", "low",
+                f"{len(inert)} tracker(s) referenced in the page but NOT observed firing before consent",
+                "Present in page source only (likely held back by the consent manager): "
+                + ", ".join(t["name"] for t in inert[:12]),
+                extra="Not counted as a violation. Verify they only load after opt-in.")
         if traps:
             tev = "Trackers capturing IP/device identifiers: " + ", ".join(t["name"] for t in traps[:12])
             if dyn and beacons:
                 tev += "\nSample third-party beacons (carry client IP + device data):\n" + "\n".join(beacons[:6])
-            add("trap_trace", "critical",
-                f"Trap-and-trace exposure — {len(traps)} tracker(s) capture IP/device identifiers", tev)
+            add("trap_trace", "critical" if dyn else "high",
+                f"Trap-and-trace exposure — {len(traps)} tracker(s) capture IP/device identifiers"
+                + ("" if dyn else " (present in page source; not confirmed firing)"), tev,
+                extra="" if dyn else _STATIC_NOTE)
         if wires:
             add("wiretap", "high",
                 f"Wiretapping/interception exposure — {len(wires)} session-replay/chat tool(s)",
                 "Tools intercepting interaction/keystrokes: " + ", ".join(t["name"] for t in wires[:12]))
         if not site["dns_link"] and adv:
-            add("no_dns_link", "high", "No 'Do Not Sell or Share My Personal Information' link",
+            add("no_dns_link", "high" if dyn else "medium",
+                "No 'Do Not Sell or Share My Personal Information' link"
+                + ("" if dyn else " found in the static page source"),
                 f"{len(adv)} advertising tracker(s) present (" + ", ".join(t["name"] for t in adv[:6])
-                + "); no 'Do Not Sell/Share' or 'Your Privacy Choices' link found on the page.")
+                + "); no 'Do Not Sell/Share' or 'Your Privacy Choices' link found on the page.",
+                extra="" if dyn else _STATIC_NOTE)
         if not site["banner"] and pre:
-            add("no_banner", "high", "No cookie-consent banner detected",
-                "Non-essential trackers are present but no CMP/banner signature was found on the page.")
+            add("no_banner", "high" if dyn else "medium",
+                "No cookie-consent banner detected" + ("" if dyn else " in the static page source"),
+                "Non-essential trackers are present but no CMP/banner signature was found on the page.",
+                extra="" if dyn else _STATIC_NOTE)
         if dyn and consent_dyn and consent_dyn.get("banner"):
             if not consent_dyn.get("reject_present"):
                 add("consent_no_reject", "high", "Cookie banner has no equally-prominent 'Reject All'",

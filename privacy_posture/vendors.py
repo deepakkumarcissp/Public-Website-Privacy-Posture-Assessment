@@ -180,5 +180,14 @@ def detect(html: str, extra_urls=None, cfg: dict = None) -> list[dict]:
     return out
 
 
+def detect_fired(request_urls, cfg: dict = None) -> set:
+    """Names of non-CMP vendors with at least one OBSERVED network request.
+
+    Unlike detect(), this ignores page HTML: a script tag that is present but
+    inert (e.g. held back by a consent manager with type="text/plain") is not
+    a tracker that fired."""
+    return {v["name"] for v in detect("", extra_urls=request_urls, cfg=cfg) if not v["is_cmp"]}
+
+
 def is_ai_or_chat(vendor: dict) -> bool:
     return vendor.get("category") == "Chat / AI"

@@ -51,15 +51,19 @@ curl -fsSL https://raw.githubusercontent.com/deepakkumarcissp/Public-Website-Pri
 iwr -useb https://raw.githubusercontent.com/deepakkumarcissp/Public-Website-Privacy-Posture-Assessment/main/install.ps1 | iex
 ```
 
-That downloads the project, sets up a private virtual environment, installs dependencies, starts
-the local web UI, and opens your browser at `http://127.0.0.1:1009`. Run the same command again any
-time to update and relaunch.
+That one command installs anything missing (Python 3.9+, venv support, git, and Chromium/Chrome for
+the full scan — via apt/dnf/pacman/zypper/brew on Linux/macOS, or winget on Windows), downloads the
+project, sets up a private virtual environment, installs dependencies, starts the local web UI, and
+opens your browser at `http://127.0.0.1:1009` — always that port; if an older copy of the app is
+still running there, it is stopped and replaced. Package
+installs need admin rights, so you may be asked for your password once. Run the same command again
+any time to update and relaunch.
 
 Prefer not to pipe a script into your shell? Download the repo and double-click `run.sh` (Linux),
 `run.command` (macOS), or `run.bat` (Windows) instead.
 
-For the **dynamic scan**, have Google Chrome or Chromium installed locally — the tool finds it
-automatically. Without it, the static scan still runs and covers most of the same checks (it just
+The **dynamic scan** uses Chrome, Chromium or Edge (installed for you above if missing; set
+`CHROME_BIN=/path/to/browser` to use a specific one). Without it, the static scan still runs and covers most of the same checks (it just
 can't prove the Reject-All flow actually works).
 
 ## Use it — command line

@@ -36,11 +36,26 @@ except Exception:
 
 
 def _chromium_bin() -> str:
-    for b in ("chromium", "chromium-browser", "google-chrome", "google-chrome-stable", "chrome"):
+    """Find a Chromium-family browser. CHROME_BIN overrides auto-detection."""
+    override = os.environ.get("CHROME_BIN", "")
+    if override and os.path.exists(override):
+        return override
+    for b in ("chromium", "chromium-browser", "google-chrome", "google-chrome-stable",
+              "chrome", "microsoft-edge", "microsoft-edge-stable"):
         p = shutil.which(b)
         if p:
             return p
-    for p in ("/usr/bin/chromium", "/usr/bin/google-chrome"):
+    candidates = ["/usr/bin/chromium", "/usr/bin/google-chrome", "/snap/bin/chromium",
+                  "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+                  "/Applications/Chromium.app/Contents/MacOS/Chromium",
+                  "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge"]
+    for env in ("PROGRAMFILES", "PROGRAMFILES(X86)", "LOCALAPPDATA"):
+        base = os.environ.get(env)
+        if base:
+            candidates += [os.path.join(base, "Google", "Chrome", "Application", "chrome.exe"),
+                           os.path.join(base, "Chromium", "Application", "chrome.exe"),
+                           os.path.join(base, "Microsoft", "Edge", "Application", "msedge.exe")]
+    for p in candidates:
         if os.path.exists(p):
             return p
     return ""

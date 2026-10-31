@@ -418,10 +418,12 @@ function renderHero(result) {
   const s = result.site || {};
   const chips = [
     { ok: s.https, textYes: 'HTTPS', textNo: 'No HTTPS' },
-    { ok: s.hsts, textYes: 'HSTS', textNo: 'No HSTS' },
-    { ok: s.banner, textYes: s.cmp ? `Consent banner (${s.cmp})` : 'Consent banner', textNo: 'No consent banner' },
+    { ok: s.hsts, textYes: 'HSTS', textNo: 'No HSTS header',
+      tip: 'No Strict-Transport-Security header was seen on the main response. Browser HSTS-preload-list status is not checked (this tool makes no third-party lookups), so a preloaded domain can still be protected.' },
+    { ok: s.banner, textYes: s.cmp ? `Consent banner (${s.cmp})` : 'Consent banner', textNo: 'No banner seen',
+      tip: 'No consent banner was served to this scan (one location, one page load). Some sites show banners only in certain regions, so this is only a finding when trackers load before consent.' },
   ];
-  const chipHtml = chips.map(c => `<span class="chip ${c.ok ? 'ok' : 'bad'}"><span class="dot"></span>${esc(c.ok ? c.textYes : c.textNo)}</span>`).join('');
+  const chipHtml = chips.map(c => `<span class="chip ${c.ok ? 'ok' : 'bad'}"${!c.ok && c.tip ? ` title="${esc(c.tip)}"` : ''}><span class="dot"></span>${esc(c.ok ? c.textYes : c.textNo)}</span>`).join('');
   return `
     <div class="hero">
       <div class="gauge-wrap">

@@ -19,14 +19,18 @@ if errorlevel 1 (
   exit /b 1
 )
 
-if not exist ".venv\Scripts\python.exe" (
-  echo First-time setup -- this takes a minute...
-  python -m venv .venv
+if not exist ".venv\Scripts\python.exe" python -m venv .venv
+if not exist ".venv\.installed" (
+  echo Setting up -- this takes a minute...
   .venv\Scripts\python.exe -m pip install -q --upgrade pip
   .venv\Scripts\python.exe -m pip install -q -e ".[web,dynamic-scan]"
+  if errorlevel 1 ( echo Install failed. & pause & exit /b 1 )
+  echo ok> .venv\.installed
 )
 
 if "%PORT%"=="" set PORT=1009
+REM Stop any previous copy of this app so port %PORT% is free.
+taskkill /F /IM dkcissp-privacy-assessment-web.exe >nul 2>nul
 start "" http://127.0.0.1:%PORT%
 
 echo.
