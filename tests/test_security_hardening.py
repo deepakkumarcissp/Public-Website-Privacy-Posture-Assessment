@@ -286,3 +286,28 @@ def test_max_content_length_is_set():
     # the test client.
     assert webapp.app.config["MAX_CONTENT_LENGTH"]
     assert webapp.app.config["MAX_CONTENT_LENGTH"] <= 50 * 1024 * 1024
+
+
+def test_main_refuses_non_loopback_host(monkeypatch):
+    pytest.importorskip("flask")
+    from privacy_posture import webapp
+    monkeypatch.setenv("HOST", "0.0.0.0")
+    with pytest.raises(SystemExit):
+        webapp.main()
+
+
+def test_safe_get_pins_connection_to_validated_ip(monkeypatch):
+    from privacy_posture import engine
+    seen = {}
+
+    def fake_capped(url, **kw):
+        seen["pin"] = engine._pin_local.pins.get("example.com")
+        class R:
+            is_redirect = is_permanent_redirect = False
+        return R()
+
+    monkeypatch.setattr(engine, "_resolve_pinned_ip", lambda h: "93.184.216.34")
+    monkeypatch.setattr(engine, "_capped_get", fake_capped)
+    assert engine._safe_get("https://example.com/") is not None
+    assert seen["pin"] == "93.184.216.34"
+    assert "example.com" not in engine._pin_local.pins

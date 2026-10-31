@@ -1,8 +1,9 @@
 requests>=2.32.4
+openpyxl>=3.1
 
 # Optional — only needed for the local web UI:
-# flask>=2.3
+# flask>=3.0.3
 
 # Optional — only needed for the dynamic headless-Chromium scan
 # (also requires a local Chrome/Chromium install):
-# websocket-client>=1.5
+# websocket-client>=1.7

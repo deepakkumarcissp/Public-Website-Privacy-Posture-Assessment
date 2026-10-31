@@ -261,8 +261,13 @@ def api_report():
 def main():
     port = int(os.environ.get("PORT", "1009"))
     host = os.environ.get("HOST", "127.0.0.1")
-    debug = os.environ.get("DEBUG", "").lower() in ("1", "true", "yes")
-    app.run(host=host, port=port, debug=debug)
+    # This tool has no authentication beyond a per-process token and is a
+    # scan-anything proxy, so it must only ever listen on loopback. The
+    # Werkzeug debugger (formerly enabled via DEBUG) allows code execution
+    # and is intentionally not offered.
+    if host not in ("127.0.0.1", "localhost", "::1"):
+        raise SystemExit(f"Refusing to bind to {host!r}: this tool only supports loopback (127.0.0.1).")
+    app.run(host=host, port=port, debug=False)
 
 
 if __name__ == "__main__":

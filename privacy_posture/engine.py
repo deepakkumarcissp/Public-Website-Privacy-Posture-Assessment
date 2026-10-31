@@ -35,6 +35,7 @@ from __future__ import annotations
 import ipaddress
 import re
 import socket
+import threading
 from typing import Optional
 from urllib.parse import urljoin, urlparse
 
@@ -210,6 +211,33 @@ def _is_safe_target(host: str) -> bool:
     return _resolve_pinned_ip(host) is not None
 
 
+# Per-thread {hostname: validated IP} used to pin the TCP connection made by
+# requests/urllib3. Without it, _safe_get validates one DNS answer but urllib3
+# then resolves the name AGAIN, so a hostname under attacker DNS control could
+# answer with a public IP the first time and an internal one the second
+# (DNS rebinding). Only the TCP destination is swapped: the URL, Host header,
+# SNI and certificate verification still use the original hostname.
+_pin_local = threading.local()
+
+
+def _install_connection_pinning() -> None:
+    from urllib3.util import connection as _u3conn
+    if getattr(_u3conn.create_connection, "_dkcissp_pinned", False):
+        return
+    _orig = _u3conn.create_connection
+
+    def create_connection(address, *args, **kwargs):
+        host, port = address
+        ip = getattr(_pin_local, "pins", {}).get(host)
+        return _orig((ip, port) if ip else address, *args, **kwargs)
+
+    create_connection._dkcissp_pinned = True
+    _u3conn.create_connection = create_connection
+
+
+if _HAVE_REQUESTS:
+    _install_connection_pinning()
+
 _MAX_REDIRECTS = 5
 _MAX_BODY_BYTES = 10 * 1024 * 1024  # 10 MB — generous for any real page
 
@@ -267,9 +295,17 @@ def _safe_get(url: str, **kwargs):
     kwargs["allow_redirects"] = False
     for _ in range(_MAX_REDIRECTS + 1):
         host = urlparse(url).hostname or ""
-        if not _is_safe_target(host):
+        pinned_ip = _resolve_pinned_ip(host)
+        if pinned_ip is None:
             return None
-        r = _capped_get(url, **kwargs)
+        pins = getattr(_pin_local, "pins", None)
+        if pins is None:
+            pins = _pin_local.pins = {}
+        pins[host] = pinned_ip.strip("[]")
+        try:
+            r = _capped_get(url, **kwargs)
+        finally:
+            pins.pop(host, None)
         if r.is_redirect or r.is_permanent_redirect:
             location = r.headers.get("Location")
             if not location:
