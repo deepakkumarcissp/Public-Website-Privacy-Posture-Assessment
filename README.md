@@ -132,6 +132,32 @@ for finding in result["findings"]:
 | `headless` | `True` (default) tries the dynamic Chromium scan first, falling back to static. Set `False` to always use the static scan. |
 | `settle` | Seconds to wait for network activity to settle during the dynamic scan (default `4.0`). |
 
+## Accuracy, limitations & disclaimer
+
+This tool gives you an **indicator, not a legal verdict**. It is not legal advice and does not
+certify compliance with GDPR, CCPA/CPRA, CIPA, India DPDP or PDPA. Have counsel review anything
+that matters.
+
+- **One scan, one place, one moment.** Each assessment is a single page load from your machine and
+  region. Consent banners, tags and opt-out links often differ by country, device, logged-in state
+  and time, so a result can change from run to run.
+- **"Fired before consent" means observed.** In the dynamic (Chromium) scan, a tracker is only
+  reported as firing before consent if a network request to it was actually seen. A tracker that is
+  merely referenced in the page source — for example a script a consent manager is holding back —
+  is reported as a Low note, not a violation.
+- **Static scans are limited.** The static mode reads raw HTML only. Banners, consent-based tag
+  gating and "Do Not Sell/Share" links are usually injected by JavaScript and are invisible to it,
+  so static findings are downgraded and may be false positives. Use the dynamic scan for a verified
+  result.
+- **HSTS** is checked via the response header only; browser HSTS-preload status is not looked up
+  (the tool makes no third-party lookups), so a preloaded domain can show "No HSTS header".
+- **Tracker detection** matches a built-in vendor list (`privacy_posture/vendors.py`); unknown or
+  first-party-proxied trackers are not detected. Add your own via the config.
+- **Score** starts at 100 and subtracts per finding (Critical 28, High 16, Medium 8, Low 3, floor
+  0). It is a relative indicator for tracking improvement, not a measure of legal exposure.
+- Spotted a wrong result? Please open an issue with the domain (if you can share it) and the
+  finding — false positives are treated as bugs.
+
 ## Safety
 
 - Never submits forms, logs in, or interacts with the page beyond what a normal visitor's browser
